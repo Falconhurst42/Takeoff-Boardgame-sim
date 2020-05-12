@@ -47,6 +47,7 @@ struct Airport {
     // routes stored as <Airport*, Color>
     vector<pair<Airport*, Color>> children, parents;
     vector<Airplane*> occupants;
+    vector<Airplane*> shadow_occupants;
 };
 
 struct Option {
@@ -58,33 +59,55 @@ class Airplane {
     private:
         std::unordered_map<string, Airport> map;
         Airport* location;
+        Airport* shadow_location;
         const Player* owner;
 
+        // airpost occupancy accessor function which accounts for main-shadow distinction
+        vector<Airplane*>& get_occupancy_special(Airport* loc, bool main_board) {
+            if(main_board) {
+                return loc->occupants;
+            }
+            else {
+                return loc->shadow_occupants;
+            }
+        }
+
+        // access location variable, which one depends on main-shadow flag
+        Airport*& get_location_special(bool main_board) {
+            if(main_board) {
+                return location;
+            }
+            else {
+                return shadow_location;
+            }
+        }
+
         // if plane gets bumped, do this
-        bool bumped() {
-            location = &(map.at("START"));
-            (map.at("START")).occupants.push_back(this);
+        bool bumped(bool main_board) {
+            get_location_special(main_board) = &(map.at("START"));
+            get_occupancy_special(&(map.at("START")), main_board).push_back(this);
         }
 
         // updates loc, returns nothing for now
-        bool move(Airport* dest) {
+        bool move(Airport* dest, bool main_board) {
+            
             // remove this plane from the old location
-            std::remove(location->occupants.begin(), location->occupants.end(), this);
+            std::remove(get_occupancy_special(get_location_special(main_board), main_board).begin(), get_occupancy_special(get_location_special(main_board), main_board).end(), this);
             // add it to the new one
-            dest->occupants.push_back(this);
+            get_occupancy_special(dest, main_board).push_back(this);
             return true;            
         }
 
         // jumps plane to given destination (key), returns success of jump (false if dest does not exist in map)
-        bool jump(string dest) {
+        bool jump(string dest, bool main_board) {
             try {
                 // avoid stationary jumps (will throw error if dest is invalid)
-                if(location == &(map.at(dest))) {
+                if(get_location_special(main_board) == &(map.at(dest))) {
                     // in stationary jump, nothing needs to be done
                     return true;
                 }
                 // else move
-                move(&(map.at(dest)));
+                move(&(map.at(dest)), main_board);
                 return true;
             }
             // case that dest (or location) does not exist in map
@@ -95,13 +118,14 @@ class Airplane {
 
         // moves plane along its child route with the given color
         // returns true if route existed and plane was moved
-        bool move_route(Color c) {
+        bool move_route(Color c, bool main_board) {
             // find destination
-            for(int i = 0; i < location->children.size(); i++) {
+            Airport* loc = get_location_special(main_board);
+            for(int i = 0; i < loc->children.size(); i++) {
                 // if the color of the rout matches
-                if(location->children[i].second == c) {
+                if(loc->children[i].second == c) {
                     // move to the destination of the route
-                    move(location->children[i].first);
+                    move(loc->children[i].first, main_board);
                     // return success
                     return true;
                 }
@@ -110,12 +134,13 @@ class Airplane {
             return false;
         }
 
-        Airport* identify_dest(Color c) {
-            for (int i = 0; i < location->children.size(); i++) {
+        Airport* identify_dest(Color c, bool main_board) {
+            Airport* loc = get_location_special(main_board);
+            for (int i = 0; i < loc->children.size(); i++) {
                 // if the color of the rout matches
-                if(location->children[i].second == c) {
+                if(loc->children[i].second == c) {
                     // return dest
-                    return location->children[i].first;
+                    return loc->children[i].first;
                 }
             }
             // return failure if you make it here
@@ -136,13 +161,13 @@ class Airplane {
 
         // does action (takeoff or color move)
         // returns success
-        bool do_action(Action act) {
+        bool do_action(Action act, bool main_board) {
             // move takeoff
             if(act.type == 'T') {
-                return jump(act.info);
+                return jump(act.info, main_board);
             }
             else if(act.type == 'C') {
-                return move_route(*(new Color(act.info)));
+                return move_route(*(new Color(act.info)), main_board);
             }
             else {
                 throw std::domain_error("invalid action type");
@@ -152,17 +177,18 @@ class Airplane {
 
         // checks whether plane should be bumping
         // returns whether bump occured
-        bool check_bump() {
+        bool check_bump(bool main_board) {
             bool did_the_thing = false;
             // if there are multiple planes here
-            if(location->occupants.size() > 1) {
+            vector<Airplane*> occ = get_occupancy_special(get_location_special(main_board), main_board);
+            if(occ.size() > 1) {
                 // for each plane
-                for(int i = 0; i < location->occupants.size(); i++) {
+                for(int i = 0; i < occ.size(); i++) {
                     // if it is a different plane
-                    if(location->occupants[i] != this) {
+                    if(occ[i] != this) {
                         // with a different owner
-                        if(location->occupants[i]->owner != owner) {
-                            location->occupants[i]->bumped();
+                        if(occ[i]->owner != owner) {
+                            occ[i]->bumped(main_board);
                             did_the_thing = true;
                         }
                         // if same owner, problem!
@@ -175,16 +201,21 @@ class Airplane {
             return did_the_thing;
         }
 
+        // sync shadow location with real location
+        void sync() {
+            shadow_location = location;
+        }
+
         // Accessors
-        string get_loc_name() const {
-            return location->name;
+        string get_loc_name(bool main_board) {
+            return get_location_special(main_board)->name;
         }
 
-        Airport* get_loc() const {
-            return location;
+        Airport* get_loc(bool main_board) {
+            return get_location_special(main_board);
         }
 
-        const Player* get_owner_ptr() const {
+        const Player* get_owner_ptr() {
             return owner;
         }
 
@@ -203,6 +234,7 @@ class Player {
         Game* game;
         vector<Airplane> planes;
         Color plane_color;
+        const float BUMP_VALUE = 20;
 
         // returns vector with Actions to be taken this turn
         vector<Action> roll(int dice = 2) {
@@ -239,12 +271,12 @@ class Player {
         }
 
         // default plane scoring, just goes by latitude of location
-        float get_plane_score(Airplane a) {
+        float get_plane_score(Airplane a, bool main_board) {
             // really good if at end
-            if(a.get_loc_name() == "END") {
-                return 500;
+            if(a.get_loc_name(main_board) == "END") {
+                return 150;
             }
-            return a.get_loc()->lat;
+            return a.get_loc(main_board)->lat;
         }
 
         // given a set of actions, returns best movement plan
@@ -264,7 +296,7 @@ class Player {
 
             // tracks best combination so far
             int best_actions_used = 0;  // highest priority
-            float best_score = 0;       // secondary priority
+            float best_score = -10000;  // secondary priority
             pair<int, int> best_combo_indexes;
 
             // if there isn't a valid move at the maximum number of moves, we will decrease the number of moves until we find a valid move
@@ -273,21 +305,52 @@ class Player {
                 for(int i = 0; i < plane_permutations.size(); i++ ) {
                     // for each permutation of actions applied to that order of planes
                     for(int j = 0; j < action_permutations.size; j++) {
-                        // create simulation board and planes
+                        // this will all done with "main_board" flagged as false
+                        // which effectively means we are moving planes in a shadow version of the board
+                        game->sync_boards();
+
+                        int actions_used(0);
 
                         // do actions on imaginary planes
-                        for(int m = 0; m < action_count; m++) {
-                            // plane_permutations[i][m].do_action(action_permutations[j][m]);
+                        for(int t = 0; t < action_count; t++) {
+                            // track successful moves
+                            if(plane_permutations[i][t].do_action(action_permutations[j][t], false)) {
+                                actions_used++;
+                            }
                         }
 
-                        //check bumps
+                        int score = 0;
 
-                        // compute final score
+                        // check bumps and add points
+                        for(int b = 0; b < plane_permutations[i].size(); b++) {
+                            if(plane_permutations[i][b].check_bump(false)) {
+                                score += BUMP_VALUE;
+                            }
+                        }
+
+                        // add individual plane scores
+                        for(int p = 0; p < plane_permutations[i].size(); p++) {
+                            score += get_plane_score(plane_permutations[i][p], false);
+                        }
 
                         // update best score
+                        if(actions_used >= best_actions_used && score > best_score) {
+                            best_score = score;
+                            best_actions_used = actions_used;
+                            best_combo_indexes = std::make_pair(i, j);
+                        }
                     }
                 }
             }
+
+            // transform best moves into return structure
+            vector<pair<Airplane, Action>> best_moves(actions.size());
+            for(int i = 0; i < actions.size(); i++) {
+                best_moves[i] = std::make_pair( plane_permutations[best_combo_indexes.first][i], 
+                                                action_permutations[best_combo_indexes.second][i] );
+            }
+
+            return best_moves;
         }
 
         // referenced: "Print all possible strings of length k that can be formed from a set of n characters" from geeksforgeeks.com. https://www.geeksforgeeks.org/print-all-combinations-of-given-length/
@@ -315,9 +378,7 @@ class Player {
             }
         }
 
-    public:
-        // if action.info = "wild", must change color before sending to move command
-        
+    public:        
         Player(Game* g, vector<Airplane> p, Color c)  :
             game(g), 
             planes(p), 
@@ -327,7 +388,8 @@ class Player {
                 }
             }
 
-        bool take_turn() {
+        // rolls moves, decides how to do them, and does them
+        void take_turn() {
             // roll to get actions
             vector<Action> actions = roll();
 
@@ -337,16 +399,16 @@ class Player {
                 if(actions[i].type == 'T') {
                     // find the worst plane
                     Airplane worst_plane = planes[0];
-                    float worst_score = get_plane_score(worst_plane);
+                    float worst_score = get_plane_score(worst_plane, true);
                     for(int j = 1; j < planes.size; j++) {
-                        float score = get_plane_score(planes[j]);
+                        float score = get_plane_score(planes[j], true);
                         if(score < worst_score) {
                             worst_plane = planes[j];
                             worst_score = score;
                         }
                     }
                     // and use the take-off on it
-                    worst_plane.do_action(actions[i]);
+                    worst_plane.do_action(actions[i], true);
 
                     // delete used take-off
                     for(int j = i+1; j < actions.size(); j++) {
@@ -363,13 +425,20 @@ class Player {
 
                 // do moves
                 for(int i = 0; i < move_plan.size(); i++) {
-                    move_plan[i].first.do_action(move_plan[i].second);
+                    move_plan[i].first.do_action(move_plan[i].second, true);
                 }
             }
 
             // check for bumps
             for(int i = 0; i < planes.size(); i++) {
-                planes[i].check_bump();
+                planes[i].check_bump(true);
+            }
+        }
+
+        // sync shadow location with real location for all planes
+        void sync_planes() {
+            for(int i = 0; i < planes.size(); i++) {
+                planes[i].sync();
             }
         }
 
@@ -398,7 +467,7 @@ class Game {
                     // make planes vector of right size
                     vector<Airplane> temp_planes(planes_per_player);
                     // initialize player and add to vector
-                    players.emplace_back(this, temp_planes, (new Color())->DEFUALT_COLORS[i]);  // can't really make a static const array, so I have to do this for now
+                    players.emplace_back(this, temp_planes, (new Color())->DEFUALT_COLORS[i]);  // can't really make a static const array, so I have to do this to access default colors
                     /*for(int i = 0; i < temp_planes.size(); i++) {
                         planes.push_back(temp_planes[i]);
                     }*/
@@ -409,12 +478,23 @@ class Game {
                     // basic: manually initialize airports and connections
         }
 
+        // simulate drawing a take-off card
         string draw_takeoff() {
             // move the one we're drawing to the bottom
             takeoff_pile.push(takeoff_pile.front());
             takeoff_pile.pop();
             // return the one on the bottom
             return takeoff_pile.back();
+        }
+
+        // sync all shadow occupancies with regular occupancies and all shadow locations with regular locations
+        void sync_boards() {
+            for(auto it = map.begin(); it != map.end(); it++) {
+                (*it).second.shadow_occupants = (*it).second.occupants;
+            }
+            for(int i = 0; i < players.size(); i++) {
+                players[i].sync_planes();
+            }
         }
 
 };
