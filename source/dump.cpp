@@ -56,14 +56,14 @@ struct Option {
 // Airplane Class
 class Airplane {
     private:
-        Game* game;
+        std::unordered_map<string, Airport> map;
         Airport* location;
         const Player* owner;
 
         // if plane gets bumped, do this
         bool bumped() {
-            location = &(game->map.at("START"));
-            (game->map.at("START")).occupants.push_back(this);
+            location = &(map.at("START"));
+            (map.at("START")).occupants.push_back(this);
         }
 
         // updates loc, returns nothing for now
@@ -79,12 +79,12 @@ class Airplane {
         bool jump(string dest) {
             try {
                 // avoid stationary jumps (will throw error if dest is invalid)
-                if(location == &(game->map.at(dest))) {
+                if(location == &(map.at(dest))) {
                     // in stationary jump, nothing needs to be done
                     return true;
                 }
                 // else move
-                move(&(game->map.at(dest)));
+                move(&(map.at(dest)));
                 return true;
             }
             // case that dest (or location) does not exist in map
@@ -126,7 +126,13 @@ class Airplane {
         // basic constructor, defaults position to start
         Airplane(const Player* own = NULL, const string& loc = "START") : 
             owner(own), 
-                location( &(game->map.at(loc) ) ) {}
+            map((owner->get_game())->map),
+            location( &(map.at(loc)) ) {}
+        
+        Airplane(const Airplane& other) :
+            map(other.map),
+            location(other.location),
+            owner(other.owner) {}
 
         // does action (takeoff or color move)
         // returns success
@@ -185,6 +191,11 @@ class Airplane {
         void set_owner_ptr(Player* own) {
             owner = own;
         }
+
+        void change_map(std::unordered_map<string, Airport> new_map) {
+            map = new_map;
+        }
+
 };
 
 class Player {
@@ -229,6 +240,10 @@ class Player {
 
         // default plane scoring, just goes by latitude of location
         float get_plane_score(Airplane a) {
+            // really good if at end
+            if(a.get_loc_name() == "END") {
+                return 500;
+            }
             return a.get_loc()->lat;
         }
 
@@ -252,13 +267,25 @@ class Player {
             float best_score = 0;       // secondary priority
             pair<int, int> best_combo_indexes;
 
-            // for each permutation of planes
-            for(int i = 0; i < plane_permutations.size(); i++ ) {
-                // for each permutation of actions applied to that order of planes
-                for(int j = 0; j < action_permutations.size; j++) {
-                    // simulate that particular order of moves
-                    // record score
-                    // update best if necessary
+            // if there isn't a valid move at the maximum number of moves, we will decrease the number of moves until we find a valid move
+            for(int action_count = actions.size(); action_count > 0; action_count--) {
+                // for each permutation of planes
+                for(int i = 0; i < plane_permutations.size(); i++ ) {
+                    // for each permutation of actions applied to that order of planes
+                    for(int j = 0; j < action_permutations.size; j++) {
+                        // create simulation board and planes
+
+                        // do actions on imaginary planes
+                        for(int m = 0; m < action_count; m++) {
+                            // plane_permutations[i][m].do_action(action_permutations[j][m]);
+                        }
+
+                        //check bumps
+
+                        // compute final score
+
+                        // update best score
+                    }
                 }
             }
         }
@@ -305,13 +332,39 @@ class Player {
             vector<Action> actions = roll();
 
             // do take-offs on worst planes
+            for(int i = 0; i < actions.size(); i++) {
+                // if an action is a take-off
+                if(actions[i].type == 'T') {
+                    // find the worst plane
+                    Airplane worst_plane = planes[0];
+                    float worst_score = get_plane_score(worst_plane);
+                    for(int j = 1; j < planes.size; j++) {
+                        float score = get_plane_score(planes[j]);
+                        if(score < worst_score) {
+                            worst_plane = planes[j];
+                            worst_score = score;
+                        }
+                    }
+                    // and use the take-off on it
+                    worst_plane.do_action(actions[i]);
 
-            // decide how to move given those actions
-            vector<pair<Airplane, Action>> move_plan = decide_moves(actions);
+                    // delete used take-off
+                    for(int j = i+1; j < actions.size(); j++) {
+                        actions[j-1] = actions[j];
+                    }
+                    actions.pop_back();
+                }
+            }
 
-            // do moves
-            for(int i = 0; i < move_plan.size(); i++) {
-                move_plan[i].first.do_action(move_plan[i].second);
+            // if there are still moves left
+            if(actions.size() > 0) {
+                // decide how to move given those actions
+                vector<pair<Airplane, Action>> move_plan = decide_moves(actions);
+
+                // do moves
+                for(int i = 0; i < move_plan.size(); i++) {
+                    move_plan[i].first.do_action(move_plan[i].second);
+                }
             }
 
             // check for bumps
@@ -320,6 +373,9 @@ class Player {
             }
         }
 
+        Game* get_game() const {
+            return game;
+        }
 };
 
 class Game {
@@ -336,22 +392,21 @@ class Game {
             NUM_OF_PLAYERS(player_count), 
             PLANES_PER_PLAYER(planes_per_player), 
             MAX_TURNS(max_turns) {
-            srand(time(0));
-            // initialize players
-            for(int i = 0; i < player_count; i++) {
-                // make planes vector of right size
-                vector<Airplane> temp_planes(planes_per_player);
-                // initialize player and add to vector
-                players.emplace_back(this, temp_planes, (new Color())->DEFUALT_COLORS[i]);  // can't really make a static const array, so I have to do this for now
-                /*for(int i = 0; i < temp_planes.size(); i++) {
-                    planes.push_back(temp_planes[i]);
-                }*/
-            }
-            // generate Airports and connections
-                // end goal: pull airport data from .txt file and generate connections automatically
-                // intermediate: pull airport data from .txt file, data includes connections
-                // basic: manually initialize airports and connections
-
+                srand(time(0));
+                // initialize players
+                for(int i = 0; i < player_count; i++) {
+                    // make planes vector of right size
+                    vector<Airplane> temp_planes(planes_per_player);
+                    // initialize player and add to vector
+                    players.emplace_back(this, temp_planes, (new Color())->DEFUALT_COLORS[i]);  // can't really make a static const array, so I have to do this for now
+                    /*for(int i = 0; i < temp_planes.size(); i++) {
+                        planes.push_back(temp_planes[i]);
+                    }*/
+                }
+                // generate Airports and connections
+                    // end goal: pull airport data from .txt file and generate connections automatically
+                    // intermediate: pull airport data from .txt file, data includes connections
+                    // basic: manually initialize airports and connections
         }
 
         string draw_takeoff() {
@@ -362,7 +417,7 @@ class Game {
             return takeoff_pile.back();
         }
 
-}
+};
 
 int main() {
     
