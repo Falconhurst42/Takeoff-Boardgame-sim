@@ -238,8 +238,10 @@ class Player {
 
         // returns vector with Actions to be taken this turn
         vector<Action> roll(int dice = 2) {
-            int NUM_SIDES = 8;
-            string sides[NUM_SIDES] = {"red", "orange", "yellow", "green", "blue", "purple", "wild", "take-off"};
+            vector<string> sides(plane_color.DEFUALT_COLORS); // = {"red", "orange", "yellow", "green", "blue", "purple", "wild", "take-off"};
+            sides.push_back("wild");
+            sides.push_back("take-off");
+            const int NUM_SIDES = sides.size();
 
             // get string versions
             vector<string> rolls(dice);
@@ -247,7 +249,7 @@ class Player {
                 rolls[i] = sides[rand()%NUM_SIDES];
             }
 
-            // handle doubles (only works for dice = 2)
+            // handle doubles                                               FIX: (ONLY WORKS FOR dice = 2)
             if(rolls[0] == rolls[1]) {
                 rolls.push_back(rolls[0]);
                 rolls.push_back(rolls[0]);
@@ -294,6 +296,23 @@ class Player {
             vector<vector<Action>> action_permutations;
             get_all_permutations(action_permutations, unique_actions.begin(), unique_actions.end(), actions.size());
 
+            // expand wilds
+            // for each permutation
+            for(int i = 0; i < action_permutations.size(); i++) {
+                // for each action in the permutation
+                for(int j = 0; j < action_permutations.size(); j++) {
+                    // if the action is wild
+                    if(action_permutations[i][j].type == 'C' && action_permutations[i][j].info == "wild") {
+                        // create copies of the permutation replacing the wild with each of the default colors
+                        for(int c = 0; c < plane_color.DEFUALT_COLORS.size(); c++) {
+                            vector<Action> temp(action_permutations[i]);
+                            temp[j].info = plane_color.DEFUALT_COLORS[c];
+                            action_permutations.push_back(temp);
+                        }
+                    }
+                }
+            }
+
             // tracks best combination so far
             int best_actions_used = 0;  // highest priority
             float best_score = -10000;  // secondary priority
@@ -305,8 +324,12 @@ class Player {
                 for(int i = 0; i < plane_permutations.size(); i++ ) {
                     // for each permutation of actions applied to that order of planes
                     for(int j = 0; j < action_permutations.size; j++) {
+                        // simulate that particular set of moves
                         // this will all done with "main_board" flagged as false
-                        // which effectively means we are moving planes in a shadow version of the board
+                        // which means we are moving planes in a shadow version of the board
+                        // which will not effect the main board
+
+                        // sync shadow board to main board
                         game->sync_boards();
 
                         int actions_used(0);
