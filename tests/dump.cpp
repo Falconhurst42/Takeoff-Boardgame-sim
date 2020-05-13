@@ -14,7 +14,6 @@
 
 using std::vector, std::queue, std::set, std::pair, std::string, std::cout;
 
-bool DEBUG(true);
 
 // valid colors: red, orange, yellow, green, blue, purple
 struct Color {
