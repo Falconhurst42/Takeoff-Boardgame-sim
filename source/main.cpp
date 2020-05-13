@@ -2,5 +2,7 @@
 
 int main() {
     Game test(1, 2, 100);
-    test.loop();
+    for(int i = 0; i < 10; i++) {
+        test.run_game();
+    }
 }

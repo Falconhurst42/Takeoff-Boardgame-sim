@@ -191,7 +191,11 @@ class Game {
                     }
                     // remove this plane from the old location
                     if(get_location_special(main_board) != NULL) {
-                        std::remove(get_occupancy_special(get_location_special(main_board), main_board).begin(), get_occupancy_special(get_location_special(main_board), main_board).end(), this);
+                        for(int i = 0; i < get_occupancy_special(get_location_special(main_board), main_board).size(); i++) {
+                            if(get_occupancy_special(get_location_special(main_board), main_board)[i] == this) {
+                                get_occupancy_special(get_location_special(main_board), main_board).erase(get_occupancy_special(get_location_special(main_board), main_board).begin()+i);
+                            }
+                        }
                     }
                     // add it to the new one
                     get_occupancy_special(dest, main_board).push_back(this);
@@ -258,13 +262,13 @@ class Game {
                 bool do_action(Action act, bool main_board) {
                     // move takeoff
                     if(act.type == 'T') {
-                        if(main_board) {
+                        if(main_board && DEBUG) {
                             cout << "Take-off to " << act.dest->name << "! ";
                         }
                         return jump(act.dest, main_board);
                     }
                     else if(act.type == 'C') {
-                        if(main_board) {
+                        if(main_board && DEBUG) {
                             cout << act.color.c << " from " << location->name << ". ";
                         }
                         return move_route(act.color, main_board);
@@ -285,9 +289,9 @@ class Game {
                     if(occ.size() > 1) {
                         // for each plane
                         for(int i = 0; i < occ.size(); i++) {
-                            // if it is a different plane and we aren't at the start or end
-                            if( occ[i] != this && !(get_location_special(main_board) == start || get_location_special(main_board) == end) ) {
-                                // with a different owner
+                            // if we aren't at a the start or end or bumping ourself
+                            if( !(occ[i] == this || get_location_special(main_board) == start || get_location_special(main_board) == end ) ) {
+                                // if the plane has a different owner
                                 if(occ[i]->owner != owner) {
                                     occ[i]->bumped(main_board);
                                     did_the_thing = true;
@@ -297,6 +301,9 @@ class Game {
                                 }
                                 // if same owner, problem!
                                 else {
+                                    if(main_board) {
+                                        int breaking = 0;
+                                    }
                                     throw std::domain_error("trying to bump ally plane");
                                 }
                             }
@@ -371,6 +378,7 @@ class Game {
 
                 template<typename It>
                 void get_all_permutations_no_repeats(vector<vector<typename It::value_type>>& output, It start, It end, int length, vector<typename It::value_type> prefix = vector<typename It::value_type>(0))  {
+                    
                     // base case: length == 0
                     // push prefix into output
                     if(length == 0) {
@@ -390,6 +398,46 @@ class Game {
                         get_all_permutations_no_repeats(output, start+1, end, length-1, new_prefix);
                         temp++;
                     }
+                }
+
+                void expand_wild_permutation(vector<vector<Action*>>& a_p, int ind) {
+                    // copy
+                    vector<Action*> expandee = a_p[ind];
+
+                    // count wilds and leave markers
+                    int wild_count(0);
+                    for(int i = 0; i < expandee.size(); i++) {
+                        if(expandee[i]->color.c == '?') {
+                            wild_count++;
+                            expandee[i] = NULL;
+                        }
+                    }
+
+                    // generate options for a wild
+                    vector<Action *> wild_options;
+                    for(int i = 0; i < DEFUALT_COLORS.size(); i++) {
+                        wild_options.push_back(new Action(Color(DEFUALT_COLORS[i])));
+                    }
+                    // get wild permutations
+                    vector<vector<Action*>> wild_perms;
+                    get_all_permutations(wild_perms, wild_options.begin(), wild_options.end(), wild_count);
+
+                    // append wild expansions
+                    // for wild_perm
+                    for(int i = 0; i < wild_perms.size(); i++) {
+                        // create copy of expandee
+                        vector<Action*> expandee_copy(expandee);
+                        int w_p_index = 0;
+                        // for pointers in copy of expandee
+                        for(int j = 0; j < expandee_copy.size(); j++) {
+                            if(expandee_copy[j] == NULL) {
+                                expandee_copy[j] = wild_perms[i][w_p_index];
+                                w_p_index++;
+                            }
+                        }
+                        // push back filled expansion
+                        a_p.push_back(expandee_copy);
+                    }      
                 }
 
                 // default plane scoring, just goes by longitude of location
@@ -447,12 +495,10 @@ class Game {
                         for(int j = 0; j < action_permutations[i].size(); j++) {
                             // if the action is wild
                             if(action_permutations[i][j]->type == 'C' && action_permutations[i][j]->color.c == '?') {
-                                // create copies of the permutation replacing the wild with each of the default colors
-                                for(int c = 0; c < DEFUALT_COLORS.size(); c++) {
-                                    vector<Action*> temp = *(new vector<Action*>(action_permutations[i]));
-                                    temp[j] = new Action(Color(DEFUALT_COLORS[c]));
-                                    action_permutations.push_back(temp);
-                                }
+                                expand_wild_permutation(action_permutations, i);
+                                action_permutations.erase(action_permutations.begin()+i);
+                                i--;
+                                break;
                             }
                         }
                     }
@@ -473,9 +519,7 @@ class Game {
                             // which will not effect the main board
 
                             // sync shadow board to main board
-                            for(int i = 0; i < fellow_gamers.size(); i++) {
-                                fellow_gamers[i].sync_planes();
-                            }
+                            game->sync_boards();
 
                             int actions_used(0);
 
@@ -490,19 +534,31 @@ class Game {
                             int score = 0;
 
                             // check bumps and add points
-                            for(int b = 0; b < plane_permutations[i].size(); b++) {
-                                if(plane_permutations[i][b]->check_bump(false)) {
-                                    score += BUMP_VALUE;
+                            for(int b = 0; b < planes.size(); b++) {
+                                // watch out for self-bumps, thrown as error
+                                try {
+                                    if(planes[b].check_bump(false)) {
+                                        score += BUMP_VALUE;
+                                    }
+                                }
+                                catch (const std::domain_error& self_bump) {
+                                    // in case of self-bump, don't even consider this option
+                                    actions_used = -2;
                                 }
                             }
 
                             // add individual plane scores
-                            for(int p = 0; p < plane_permutations[i].size(); p++) {
-                                score += get_plane_score(plane_permutations[i][p], false);
+                            for(int p = 0; p < planes.size(); p++) {
+                                score += get_plane_score(&(planes[p]), false);
                             }
 
                             // update best score
-                            if(actions_used >= best_actions_used && score > best_score) {
+                            if(actions_used > best_actions_used) {
+                                best_score = score;
+                                best_actions_used = actions_used;
+                                best_combo_indexes = std::make_pair(i, j);
+                            } 
+                            else if(actions_used == best_actions_used && score > best_score) {
                                 best_score = score;
                                 best_actions_used = actions_used;
                                 best_combo_indexes = std::make_pair(i, j);
@@ -571,7 +627,7 @@ class Game {
                         }
                     }
 
-                    // check for bumps and planes at end
+                    // check for planes at end
                     for(int i = 0; i < planes.size(); i++) {
                         // delete planes at end
                         if(planes[i].get_loc_name(true) == "END") {
@@ -582,7 +638,9 @@ class Game {
                                     cout << "A Player has finished!\n";
                             }
                         }
-                        // check for bumps
+                    }
+                    // check for bumps
+                    for(int i = 0; i < planes.size(); i++) {
                         planes[i].check_bump(true);
                     }
 
@@ -599,7 +657,9 @@ class Game {
 
                 void gather_planes(Airport* start) {
                     for(int i = 0; i < planes.size(); i++) {
+                        DEBUG = false;
                         planes[i].do_action(Action(start), true);
+                        DEBUG = true;
                     }
                 }
 
@@ -622,23 +682,32 @@ class Game {
         const int NUM_OF_PLAYERS, PLANES_PER_PLAYER, MAX_TURNS;
         int turn_location, turn_num;
     //public:
-        Game(int player_count, int planes_per_player, int max_turns) : 
+        Game(int player_count = 4, int planes_per_player = 4, int max_turns = 100) : 
             NUM_OF_PLAYERS(player_count), 
             PLANES_PER_PLAYER(planes_per_player), 
-            MAX_TURNS(max_turns),
-            turn_location(0),
-            turn_num(0) {
-                // seed randomness
-                //int seed = time(0);
-                int seed = 1589394228;
+            MAX_TURNS(max_turns) {
+                turn_location = turn_num = 0;
+            }
+
+        void run_game() {
+            new_game();
+            loop();
+            cout << "\n\n";
+        }
+
+        void new_game() {
+            // seed randomness
+                int seed = time(0);
+                //int seed = 1589406482;
                 if(DEBUG)
                     cout << seed << '\n';
                 srand(seed);
 
                 // initialize players
-                for(int i = 0; i < player_count; i++) {
+                players.clear();
+                for(int i = 0; i < NUM_OF_PLAYERS; i++) {
                     // make planes vector of right size
-                    vector<Airplane> temp_planes(planes_per_player);
+                    vector<Airplane> temp_planes(PLANES_PER_PLAYER);
                     // initialize player and add to vector
                     players.emplace_back(this, temp_planes, DEFUALT_COLORS[i]);
                 }
@@ -647,6 +716,7 @@ class Game {
                     // intermediate: pull airport data from .txt file, data includes connections
                     // basic: manually initialize airports and connections
                 // make airports
+                map.clear();
                     map.insert(std::make_pair("START", Airport("START", 21.318611, 202.0775)));
                     map.insert(std::make_pair("Atlanta", Airport("Atlanta", 33.636667, -84.428056)));
                     map.insert(std::make_pair("Los Angeles", Airport("Los Angeles", 33.9425, -118.408056)));
@@ -683,13 +753,14 @@ class Game {
                     Airport::connect(&(map.at("END")), &(map.at("Los Angeles")), Color("green"));
 
                 // move all planes to start
-                for(int y = 0; y < player_count; y++) {
-                    for(int n = 0; n < planes_per_player; n++) {
-                        players[y].gather_planes(&(map.at("START")));
-                    }
+                for(int y = 0; y < NUM_OF_PLAYERS; y++) {
+                    players[y].gather_planes(&(map.at("START")));
                 }
 
                 // initialize take-off pile
+                while(!takeoff_pile.empty()) {
+                    takeoff_pile.pop();
+                }
                 for(auto it = map.begin(); it != map.end(); it++) {
                     // don't push start or end
                     if(!((*it).first == "START" || (*it).first == "END")) {
@@ -707,12 +778,13 @@ class Game {
                 // have each player take their turn
                 for(turn_location = 0; turn_location < players.size(); turn_location++) {
                     if(!players[turn_location].is_done()) {
-                        players[turn_location].take_turn(roll(2), players);
+                        players[turn_location].take_turn(roll(), players);
                         if(!players[turn_location].is_done())
                             someone_left = true;
                     }
                 }
             }
+            cout << "All players have finished!";
         }
 
         // simulate drawing a take-off card
@@ -735,7 +807,7 @@ class Game {
         }
 
         // returns vector with Actions to be taken this turn
-        vector<Action> roll(int dice) {
+        vector<Action> roll(int dice = 2) {
             vector<string> sides(DEFUALT_COLORS); // = {"red", "orange", "yellow", "green", "blue", "purple", "wild", "take-off"};
             sides.push_back("wild");
             sides.push_back("take-off");
@@ -776,7 +848,7 @@ class Game {
                         out = actions[i].color.c;
                     cout << "(" << actions[i].type << ", " << out << "), ";
                 }
-                cout << " ]"; 
+                cout << " ]  "; 
             }
 
             // return vector of actions
