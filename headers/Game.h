@@ -22,14 +22,14 @@ bool DEBUG(true);
 class Game;
 class Player;
 class Airplane;
-class Airport;
+struct Airport;
 struct Color;
 struct Action;
 
 #include "Color.h"
 #include "Action.h"
-#include "Airport.h"
 #include "Airplane.h"
+#include "Airport.h"
 #include "Player.h"
 
 using std::vector, std::queue, std::set, std::pair, std::string, std::cout;
