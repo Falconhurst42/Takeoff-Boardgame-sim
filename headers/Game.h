@@ -98,7 +98,7 @@ class Game {
             }
 
             // match type and info
-            void operator=(Action other) {
+            void operator=(const Action& other) {
                 type = other.type;
                 if(type == 'T') {
                     dest = other.dest;
@@ -402,7 +402,7 @@ class Game {
                 }
 
                 // given a set of actions, returns best movement plan
-                void decide_moves(vector<pair<Airplane, Action>>& move_plan, vector<Action> actions, vector<Player>& fellow_gamers)  {
+                void decide_moves(vector<pair<Airplane*, Action*>>& move_plan, vector<Action> actions, vector<Player>& fellow_gamers)  {
                     // decide what to do with rolls
                     // find every permutation of planes with length equal to number of actions (including repeated planes)
                     // permutations are tracked with pointers to ensure that operations are performed on base planes, not copies
@@ -512,9 +512,10 @@ class Game {
 
                     // dereference best moves into move_plan
                     for(int i = 0; i < actions.size(); i++) {
-                        move_plan[i] = std::make_pair( *(plane_permutations[best_combo_indexes.first][i]), 
-                                                        *(action_permutations[best_combo_indexes.second][i]) );
+                        move_plan[i] = std::make_pair( (plane_permutations[best_combo_indexes.first][i]), 
+                                                        (new Action(action_permutations[best_combo_indexes.second][i]->color)) );   // memory allocation is weird
                     }
+                    return;
                 }
             
             public:        
@@ -536,17 +537,17 @@ class Game {
                         // if an action is a take-off
                         if(actions[i].type == 'T') {
                             // find the worst plane
-                            Airplane worst_plane = planes[0];
-                            float worst_score = get_plane_score(&worst_plane, true);
+                            Airplane* worst_plane = &(planes[0]);
+                            float worst_score = get_plane_score(worst_plane, true);
                             for(int j = 1; j < planes.size(); j++) {
-                                float score = get_plane_score(&planes[j], true);
+                                float score = get_plane_score(&(planes[j]), true);
                                 if(score < worst_score) {
-                                    worst_plane = planes[j];
+                                    worst_plane = &(planes[j]);
                                     worst_score = score;
                                 }
                             }
                             // and use the take-off on it
-                            worst_plane.do_action(actions[i], true);
+                            worst_plane->do_action(actions[i], true);
 
                             // delete used take-off
                             for(int j = i+1; j < actions.size(); j++) {
@@ -559,12 +560,14 @@ class Game {
                     // if there are still moves left
                     if(actions.size() > 0) {
                         // decide how to move given those actions
-                        vector<pair<Airplane, Action>> move_plan(actions.size());
+                        vector<pair<Airplane*, Action*>> move_plan(actions.size());
                         decide_moves(move_plan, actions, fellow_gamers);
 
                         // do moves
                         for(int i = 0; i < move_plan.size(); i++) {
-                            move_plan[i].first.do_action(move_plan[i].second, true);
+                            move_plan[i].first->do_action(*(move_plan[i].second), true);
+                            // clean up dynamic declarations
+                            delete move_plan[i].second;
                         }
                     }
 
@@ -574,7 +577,7 @@ class Game {
                         if(planes[i].get_loc_name(true) == "END") {
                             planes.erase(planes.begin()+i);
                             if(planes.size() == 0) {
-                                finished == true;
+                                finished = true;
                                 if(DEBUG)
                                     cout << "A Player has finished!\n";
                             }
@@ -626,8 +629,8 @@ class Game {
             turn_location(0),
             turn_num(0) {
                 // seed randomness
-                int seed = time(0);
-                //int seed = 1589390915;
+                //int seed = time(0);
+                int seed = 1589394228;
                 if(DEBUG)
                     cout << seed << '\n';
                 srand(seed);
@@ -705,7 +708,8 @@ class Game {
                 for(turn_location = 0; turn_location < players.size(); turn_location++) {
                     if(!players[turn_location].is_done()) {
                         players[turn_location].take_turn(roll(2), players);
-                        someone_left = true;
+                        if(!players[turn_location].is_done())
+                            someone_left = true;
                     }
                 }
             }
