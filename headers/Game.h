@@ -387,40 +387,58 @@ class Game {
                         // move used one to start
                         std::swap(*temp, *start);
                         // get all permutations with that prefix one size smaller
-                        get_all_permutations(output, start+1, end, length-1, new_prefix);
+                        get_all_permutations_no_repeats(output, start+1, end, length-1, new_prefix);
                         temp++;
                     }
                 }
 
                 // default plane scoring, just goes by longitude of location
-                float get_plane_score(Airplane a, bool main_board)  {
+                float get_plane_score(Airplane* a, bool main_board)  {
                     // really good if at end
-                    if(a.get_loc_name(main_board) == "END") {
+                    if(a->get_loc_name(main_board) == "END") {
                         return 250;
                     }
-                    return -(a.get_loc(main_board)->lon);
+                    return -(a->get_loc(main_board)->lon);
                 }
 
                 // given a set of actions, returns best movement plan
-                vector<pair<Airplane, Action>> decide_moves(vector<Action> actions, vector<Player>& fellow_gamers)  {
+                void decide_moves(vector<pair<Airplane, Action>>& move_plan, vector<Action> actions, vector<Player>& fellow_gamers)  {
                     // decide what to do with rolls
                     // find every permutation of planes with length equal to number of actions (including repeated planes)
-                    vector<vector<Airplane>> plane_permutations;
-                    /*vector<Airplane*> plane_pointers(planes.size());
+                    // permutations are tracked with pointers to ensure that operations are performed on base planes, not copies
+
+                    vector<vector<Airplane*>> plane_permutations;
+                    vector<Airplane*> plane_pointers(planes.size());
                     for(int i = 0; i < planes.size(); i++) {
                         plane_pointers[i] = &(planes[i]);
-                    }*/
-                    get_all_permutations(plane_permutations, planes.begin(), planes.end(), actions.size());
+                    }
+                    get_all_permutations(plane_permutations, plane_pointers.begin(), plane_pointers.end(), actions.size());
 
                     // find every permutation of actions with length equal to number of actions (eliminate repeats by permutating on unique set)
-                    vector<vector<Action>> action_permutations;
-                    /*vector<Action*> action_pointers(actions.size());
+                    vector<vector<Action*>> action_permutations;
+                    vector<Action*> action_pointers(actions.size());
                     for(int i = 0; i < actions.size(); i++) {
                         action_pointers[i] = &(actions[i]);
-                    }*/
-                    get_all_permutations_no_repeats(action_permutations, actions.begin(), actions.end(), actions.size());
+                    }
+                    get_all_permutations_no_repeats(action_permutations, action_pointers.begin(), action_pointers.end(), actions.size());
                     // remove duplicate move permutations
-                    std::unique(action_permutations.begin(), action_permutations.end());
+                    // for each permutation
+                    for(int i = 1; i < action_permutations.size(); i++) {
+                        // compare to previous permutation
+                        // for each action in the permutations
+                        bool sameish(true);
+                        for(int j = 0; sameish && j < action_permutations[i].size(); j++) {
+                            // if they don't match, note it
+                            if( !( *(action_permutations[i][j]) == *(action_permutations[i-1][j]) ) ) {
+                                sameish = false;
+                            }
+                        }
+                        // if they matched, erase the previous one and don't advance
+                        if(sameish) {
+                            action_permutations.erase(action_permutations.begin()+i-1);
+                            i--;
+                        }
+                    }
 
                     // expand wilds
                     // for each permutation
@@ -428,11 +446,11 @@ class Game {
                         // for each action in the permutation
                         for(int j = 0; j < action_permutations[i].size(); j++) {
                             // if the action is wild
-                            if(action_permutations[i][j].type == 'C' && action_permutations[i][j].color.c == '?') {
+                            if(action_permutations[i][j]->type == 'C' && action_permutations[i][j]->color.c == '?') {
                                 // create copies of the permutation replacing the wild with each of the default colors
                                 for(int c = 0; c < DEFUALT_COLORS.size(); c++) {
-                                    vector<Action> temp(action_permutations[i]);
-                                    temp[j].color = Color(DEFUALT_COLORS[c]);
+                                    vector<Action*> temp = *(new vector<Action*>(action_permutations[i]));
+                                    temp[j] = new Action(Color(DEFUALT_COLORS[c]));
                                     action_permutations.push_back(temp);
                                 }
                             }
@@ -440,71 +458,63 @@ class Game {
                     }
 
                     // tracks best combination so far
-                    int best_actions_used = 0;  // highest priority
+                    // from the combinations that use the maximum number of actions, we will take the one with the best score
+                    int best_actions_used = -1;  // highest priority
                     float best_score = -10000;  // secondary priority
                     pair<int, int> best_combo_indexes;
 
-                    // if there isn't a valid move at the maximum number of moves, we will decrease the number of moves until we find a valid move
-                    for(int action_count = actions.size(); action_count > 0; action_count--) {
-                        // for each permutation of planes
-                        for(int i = 0; i < plane_permutations.size(); i++ ) {
-                            // for each permutation of actions applied to that order of planes
-                            for(int j = 0; j < action_permutations.size(); j++) {
-                                // simulate that particular set of moves
-                                // this will all done with "main_board" flagged as false
-                                // which means we are moving planes in a shadow version of the board
-                                // which will not effect the main board
+                    // for each permutation of planes
+                    for(int i = 0; i < plane_permutations.size(); i++ ) {
+                        // for each permutation of actions applied to that order of planes
+                        for(int j = 0; j < action_permutations.size(); j++) {
+                            // simulate that particular set of moves
+                            // this will all done with "main_board" flagged as false
+                            // which means we are moving planes in a shadow version of the board
+                            // which will not effect the main board
 
-                                // sync shadow board to main board
-                                for(int i = 0; i < fellow_gamers.size(); i++) {
-                                    fellow_gamers[i].sync_planes();
-                                }
+                            // sync shadow board to main board
+                            for(int i = 0; i < fellow_gamers.size(); i++) {
+                                fellow_gamers[i].sync_planes();
+                            }
 
-                                int actions_used(0);
+                            int actions_used(0);
 
-                                // do actions on imaginary planes
-                                for(int t = 0; t < action_count; t++) {
-                                    // track successful moves
-                                    if(plane_permutations[i][t].do_action(action_permutations[j][t], false)) {
-                                        actions_used++;
-                                    }
-                                }
-
-                                int score = 0;
-
-                                // check bumps and add points
-                                for(int b = 0; b < plane_permutations[i].size(); b++) {
-                                    if(plane_permutations[i][b].check_bump(false)) {
-                                        score += BUMP_VALUE;
-                                    }
-                                }
-
-                                // add individual plane scores
-                                for(int p = 0; p < plane_permutations[i].size(); p++) {
-                                    score += get_plane_score(plane_permutations[i][p], false);
-                                }
-
-                                // update best score
-                                if(actions_used >= best_actions_used && score > best_score) {
-                                    best_score = score;
-                                    best_actions_used = actions_used;
-                                    best_combo_indexes = std::make_pair(i, j);
+                            // do actions on imaginary planes
+                            for(int t = 0; t < actions.size(); t++) {
+                                // track successful moves
+                                if(plane_permutations[i][t]->do_action(*(action_permutations[j][t]), false)) {
+                                    actions_used++;
                                 }
                             }
-                        }
-                        if(best_actions_used == action_count) {
-                            break;
+
+                            int score = 0;
+
+                            // check bumps and add points
+                            for(int b = 0; b < plane_permutations[i].size(); b++) {
+                                if(plane_permutations[i][b]->check_bump(false)) {
+                                    score += BUMP_VALUE;
+                                }
+                            }
+
+                            // add individual plane scores
+                            for(int p = 0; p < plane_permutations[i].size(); p++) {
+                                score += get_plane_score(plane_permutations[i][p], false);
+                            }
+
+                            // update best score
+                            if(actions_used >= best_actions_used && score > best_score) {
+                                best_score = score;
+                                best_actions_used = actions_used;
+                                best_combo_indexes = std::make_pair(i, j);
+                            }
                         }
                     }
 
-                    // transform best moves into return structure
-                    vector<pair<Airplane, Action>> best_moves(actions.size());
+                    // dereference best moves into move_plan
                     for(int i = 0; i < actions.size(); i++) {
-                        best_moves[i] = std::make_pair( plane_permutations[best_combo_indexes.first][i], 
-                                                        action_permutations[best_combo_indexes.second][i] );
+                        move_plan[i] = std::make_pair( *(plane_permutations[best_combo_indexes.first][i]), 
+                                                        *(action_permutations[best_combo_indexes.second][i]) );
                     }
-
-                    return best_moves;
                 }
             
             public:        
@@ -527,9 +537,9 @@ class Game {
                         if(actions[i].type == 'T') {
                             // find the worst plane
                             Airplane worst_plane = planes[0];
-                            float worst_score = get_plane_score(worst_plane, true);
+                            float worst_score = get_plane_score(&worst_plane, true);
                             for(int j = 1; j < planes.size(); j++) {
-                                float score = get_plane_score(planes[j], true);
+                                float score = get_plane_score(&planes[j], true);
                                 if(score < worst_score) {
                                     worst_plane = planes[j];
                                     worst_score = score;
@@ -549,7 +559,8 @@ class Game {
                     // if there are still moves left
                     if(actions.size() > 0) {
                         // decide how to move given those actions
-                        vector<pair<Airplane, Action>> move_plan = decide_moves(actions, fellow_gamers);
+                        vector<pair<Airplane, Action>> move_plan(actions.size());
+                        decide_moves(move_plan, actions, fellow_gamers);
 
                         // do moves
                         for(int i = 0; i < move_plan.size(); i++) {
@@ -616,6 +627,7 @@ class Game {
             turn_num(0) {
                 // seed randomness
                 int seed = time(0);
+                //int seed = 1589390915;
                 if(DEBUG)
                     cout << seed << '\n';
                 srand(seed);
@@ -655,7 +667,7 @@ class Game {
                     Airport::connect(&(map.at("London")), &(map.at("Dubai")), Color("orange"));
                     Airport::connect(&(map.at("London")), &(map.at("Kemton Park")), Color("green"));
                     Airport::connect(&(map.at("Dubai")), &(map.at("Kemton Park")), Color("purple"));
-                    Airport::connect(&(map.at("London")), &(map.at("New York")), Color("blue"));
+                    Airport::connect(&(map.at("London")), &(map.at("New York")), Color("red"));
                     Airport::connect(&(map.at("London")), &(map.at("Atlanta")), Color("green"));
                     Airport::connect(&(map.at("Dubai")), &(map.at("Atlanta")), Color("red"));
                     Airport::connect(&(map.at("Dubai")), &(map.at("New York")), Color("yellow"));
