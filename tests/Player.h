@@ -11,10 +11,14 @@
 #include <vector>
 #include <string>
 
-#include "Game.h"
-#include "Airplane.h"
+//#include "Game.h"
+
+class Game;
+
 #include "Color.h"
 #include "Action.h"
+#include "Airplane.h"
+
 
 using std::vector, std::set, std::pair, std::string, std::cout;
 
@@ -26,14 +30,11 @@ class Player {
         const float BUMP_VALUE = 20;
         bool finished;
 
-        // returns vector with Actions to be taken this turn
-        vector<Action> roll(int dice = 2);
-
         // default plane scoring, just goes by latitude of location
         float get_plane_score(Airplane a, bool main_board);
 
         // given a set of actions, returns best movement plan
-        vector<pair<Airplane, Action>> decide_moves(vector<Action> actions);
+        vector<pair<Airplane, Action>> decide_moves(vector<Action> actions, vector<Player> fellow_gamers);
 
         // referenced: "Print all possible strings of length k that can be formed from a set of n characters" from geeksforgeeks.com. https://www.geeksforgeeks.org/print-all-combinations-of-given-length/
         //   while developing this algorithm
@@ -45,15 +46,15 @@ class Player {
     public:        
         Player(Game* g, vector<Airplane> p, Color c);
 
-        // rolls moves, decides how to do them, and does them
-        void take_turn();
+        // takes moves, decides how to do them, and does them
+        void take_turn(vector<Action> actions, vector<Player> fellow_gamers);
 
         // sync shadow location with real location for all planes
         void sync_planes();
 
-        Game* get_game() const;
-
         bool is_done() const;
 };
+
+#include "Player.cpp"
 
 #endif

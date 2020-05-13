@@ -22,16 +22,16 @@ Airport*& Airplane::get_location_special(bool main_board) {
 
 // if plane gets bumped, do this
 bool Airplane::bumped(bool main_board) {
-    get_location_special(main_board) = &(map.at("START"));
-    get_occupancy_special(&(map.at("START")), main_board).push_back(this);
+    get_location_special(main_board) = start;
+    get_occupancy_special(start, main_board).push_back(this);
 }
 
 // updates loc, returns nothing for now
 bool Airplane::move(Airport* dest, bool main_board) {
-    // remove this plane from the old location
-    if(main_board && DEBUG) {
+    if(main_board) {
         cout << "Moved from " << location->name << " to " << dest->name << ". ";
     }
+    // remove this plane from the old location
     std::remove(get_occupancy_special(get_location_special(main_board), main_board).begin(), get_occupancy_special(get_location_special(main_board), main_board).end(), this);
     // add it to the new one
     get_occupancy_special(dest, main_board).push_back(this);
@@ -40,40 +40,28 @@ bool Airplane::move(Airport* dest, bool main_board) {
     return true;            
 }
 
-// jumps plane to given destination (key), returns success of jump (false if dest does not exist in map)
-bool Airplane::jump(string dest, bool main_board) {
-    try {
-        // avoid stationary jumps (will throw error if dest is invalid)
-        if(get_location_special(main_board) == &(map.at(dest))) {
-            // in stationary jump, nothing needs to be done
-            return true;
-        }
-        // else move
-        move(&(map.at(dest)), main_board);
+// jumps plane to given destination (key)
+bool Airplane::jump(Airport* dest, bool main_board) {
+    // avoid stationary jumps
+    if(get_location_special(main_board) == dest) {
+        // in stationary jump, nothing needs to be done
         return true;
     }
-    // case that dest (or location) does not exist in map
-    catch(const std::out_of_range& e) {
-        return false;
-    }
+    // else move
+    move(dest, main_board);
+    return true;
 }
 
 // moves plane along its child route with the given color
 // returns true if route existed and plane was moved
 bool Airplane::move_route(Color c, bool main_board) {
     // find destination
-    Airport* loc = get_location_special(main_board);
-    for(int i = 0; i < loc->children.size(); i++) {
-        // if the color of the rout matches
-        if(loc->children[i].second == c) {
-            // move to the destination of the route
-            move(loc->children[i].first, main_board);
-            // return success
-            return true;
-        }
+    Airport* dest = identify_dest(c, main_board);
+    if(dest == NULL) {
+        return false;
     }
-    // return failure if you make it here
-    return false;
+    move(dest, main_board);
+    return true;
 }
 
 Airport* Airplane::identify_dest(Color c, bool main_board) {
@@ -90,14 +78,16 @@ Airport* Airplane::identify_dest(Color c, bool main_board) {
 }
 
 // basic constructor, defaults position to start
-Airplane::Airplane(const Player* own = NULL, const string& loc = "START") : 
+Airplane::Airplane(const Player* own = NULL, Airport* loc = NULL, Airport* st = NULL, Airport* en = NULL) : 
     owner(own), 
-    map((owner->get_game())->map),
-    location( &(map.at(loc)) ) {}
+    location(loc),
+    start(st),
+    end(en) {}
 
 Airplane::Airplane(const Airplane& other) :
-    map(other.map),
     location(other.location),
+    start(other.start),
+    end(other.end),
     owner(other.owner) {}
 
 // does action (takeoff or color move)
@@ -105,16 +95,16 @@ Airplane::Airplane(const Airplane& other) :
 bool Airplane::do_action(Action act, bool main_board) {
     // move takeoff
     if(act.type == 'T') {
-        if(main_board && DEBUG) {
-            cout << "Take-off to " << act.info << "! ";
+        if(main_board) {
+            cout << "Take-off to " << act.dest->name << "! ";
         }
-        return jump(act.info, main_board);
+        return jump(act.dest, main_board);
     }
     else if(act.type == 'C') {
-        if(main_board && DEBUG) {
-            cout << act.info << " from " << location->name << ". ";
+        if(main_board) {
+            cout << act.color.c << " from " << location->name << ". ";
         }
-        return move_route(*(new Color(act.info)), main_board);
+        return move_route(act.color, main_board);
     }
     else {
         throw std::domain_error("invalid action type");
@@ -132,12 +122,12 @@ bool Airplane::check_bump(bool main_board) {
         // for each plane
         for(int i = 0; i < occ.size(); i++) {
             // if it is a different plane and we aren't at the start or end
-            if( occ[i] != this && !(get_location_special(main_board)->name == "START" || get_location_special(main_board)->name == "END") ) {
+            if( occ[i] != this && !(get_location_special(main_board) == start || get_location_special(main_board) == end) ) {
                 // with a different owner
                 if(occ[i]->owner != owner) {
                     occ[i]->bumped(main_board);
                     did_the_thing = true;
-                    if(main_board && DEBUG) {
+                    if(main_board) {
                         cout << "Bumped on " << location->name << "! ";
                     }
                 }
@@ -171,8 +161,4 @@ const Player* Airplane::get_owner_ptr() {
 
 void Airplane::set_owner_ptr(Player* own) {
     owner = own;
-}
-
-void Airplane::change_map(std::unordered_map<string, Airport> new_map) {
-    map = new_map;
 }

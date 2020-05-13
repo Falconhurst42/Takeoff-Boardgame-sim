@@ -1,71 +1,44 @@
 #include "Player.h"
 
-vector<Action> Player::roll(int dice = 2) {
-    vector<string> sides(plane_color.DEFUALT_COLORS); // = {"red", "orange", "yellow", "green", "blue", "purple", "wild", "take-off"};
-    sides.push_back("wild");
-    sides.push_back("take-off");
-    const int NUM_SIDES = sides.size();
 
-    // get string versions
-    vector<string> rolls(dice);
-    for(int i = 0; i < dice; i++) {
-        rolls[i] = sides[rand()%NUM_SIDES];
+
+
+
+// referenced: "Print all possible strings of length k that can be formed from a set of n characters" from geeksforgeeks.com. https://www.geeksforgeeks.org/print-all-combinations-of-given-length/
+//   while developing this algorithm
+// and referenced zneak's answer from "Template container iterators" on StackOverflow https://stackoverflow.com/questions/30018517/template-container-iterators
+//   for how to template with my iterators
+template<typename It>
+void Player::get_all_permutations(vector<vector<typename It::value_type>>& output, It start, It end, int length, vector<typename It::value_type> prefix) {
+    // base case: length == 0
+    // push prefix into output
+    if(length == 0) {
+        output.push_back(prefix);
+        return;
     }
 
-    // handle doubles                                               FIX: (ONLY WORKS FOR dice = 2)
-    if(rolls[0] == rolls[1]) {
-        rolls.push_back(rolls[0]);
-        rolls.push_back(rolls[0]);
+    // for every item in source
+    It temp = start;
+    while(temp != end) {
+        // make a new prefix which is the old prefix plus the new item
+        vector<typename It::value_type> new_prefix(prefix);
+        new_prefix.push_back(*temp);
+        // get all permutations with that prefix one size smaller
+        get_all_permutations(output, start, end, length-1, new_prefix);
+        temp++;
     }
-
-    // convert from string to action
-    vector<Action> actions;
-    for(int i = 0; i < rolls.size(); i++) {
-        // generate takeoff action
-        if(rolls[i] == "take-off") {
-            actions.emplace_back('T', game->draw_takeoff());
-        }
-        // generate color action
-        else {
-            actions.emplace_back('C', rolls[i]);
-        }
-    }
-
-    if(DEBUG) {
-        cout << "[ "; 
-        for(int i = 0; i < actions.size(); i++) {
-            cout << "(" << actions[i].type << ", " << actions[i].info << "), ";
-        }
-        cout << " ]"; 
-    }
-
-    // return vector of actions
-    return actions;
-}
-
-// default plane scoring, just goes by latitude of location
-float Player::get_plane_score(Airplane a, bool main_board) {
-    // really good if at end
-    if(a.get_loc_name(main_board) == "END") {
-        return 250;
-    }
-    return -(a.get_loc(main_board)->lon);
 }
 
 // given a set of actions, returns best movement plan
-vector<pair<Airplane, Action>> Player::decide_moves(vector<Action> actions) {
+vector<pair<Airplane, Action>> Player::decide_moves(vector<Action> actions, vector<Player> fellow_gamers) {
     // decide what to do with rolls
     // find every permutation of planes with length equal to number of actions (including repeated planes)
     vector<vector<Airplane>> plane_permutations;
     get_all_permutations(plane_permutations, planes.begin(), planes.end(), actions.size());
 
     // find every permutation of actions with length equal to number of actions (eliminate repeats by permutating on unique set)
-    set<Action> unique_actions;
-    for(int i = 0; i < actions.size(); i++) {
-        unique_actions.insert(actions[i]);
-    }
     vector<vector<Action>> action_permutations;
-    get_all_permutations(action_permutations, unique_actions.begin(), unique_actions.end(), actions.size());
+    get_all_permutations(action_permutations, actions.begin(), actions.end(), actions.size());
 
     // expand wilds
     // for each permutation
@@ -73,11 +46,11 @@ vector<pair<Airplane, Action>> Player::decide_moves(vector<Action> actions) {
         // for each action in the permutation
         for(int j = 0; j < action_permutations.size(); j++) {
             // if the action is wild
-            if(action_permutations[i][j].type == 'C' && action_permutations[i][j].info == "wild") {
+            if(action_permutations[i][j].type == 'C' && action_permutations[i][j].color.c == '?') {
                 // create copies of the permutation replacing the wild with each of the default colors
                 for(int c = 0; c < plane_color.DEFUALT_COLORS.size(); c++) {
                     vector<Action> temp(action_permutations[i]);
-                    temp[j].info = plane_color.DEFUALT_COLORS[c];
+                    temp[j].color = Color(plane_color.DEFUALT_COLORS[c]);
                     action_permutations.push_back(temp);
                 }
             }
@@ -94,14 +67,16 @@ vector<pair<Airplane, Action>> Player::decide_moves(vector<Action> actions) {
         // for each permutation of planes
         for(int i = 0; i < plane_permutations.size(); i++ ) {
             // for each permutation of actions applied to that order of planes
-            for(int j = 0; j < action_permutations.size; j++) {
+            for(int j = 0; j < action_permutations.size(); j++) {
                 // simulate that particular set of moves
                 // this will all done with "main_board" flagged as false
                 // which means we are moving planes in a shadow version of the board
                 // which will not effect the main board
 
                 // sync shadow board to main board
-                game->sync_boards();
+                for(int i = 0; i < fellow_gamers.size(); i++) {
+                    fellow_gamers[i].sync_planes();
+                }
 
                 int actions_used(0);
 
@@ -146,31 +121,6 @@ vector<pair<Airplane, Action>> Player::decide_moves(vector<Action> actions) {
 
     return best_moves;
 }
-
-// referenced: "Print all possible strings of length k that can be formed from a set of n characters" from geeksforgeeks.com. https://www.geeksforgeeks.org/print-all-combinations-of-given-length/
-//   while developing this algorithm
-// and referenced zneak's answer from "Template container iterators" on StackOverflow https://stackoverflow.com/questions/30018517/template-container-iterators
-//   for how to template with my iterators
-template<typename It>
-void Player::get_all_permutations(vector<vector<typename It::value_type>>& output, It start, It end, int length, vector<typename It::value_type> prefix = vector<typename It::value_type>(0)) {
-    // base case: length == 0
-    // push prefix into output
-    if(length == 0) {
-        output.push_back(prefix);
-        return;
-    }
-
-    // for every item in source
-    It temp = start;
-    while(temp != end) {
-        // make a new prefix which is the old prefix plus the new item
-        vector<typename It::value_type> new_prefix(prefix);
-        new_prefix.push_back(*temp);
-        // get all permutations with that prefix one size smaller
-        get_all_permutations(output, start, end, length-1, new_prefix);
-        temp++;
-    }
-}
        
 Player::Player(Game* g, vector<Airplane> p, Color c)  :
     game(g), 
@@ -183,10 +133,8 @@ Player::Player(Game* g, vector<Airplane> p, Color c)  :
     }
 
 
-// rolls moves, decides how to do them, and does them
-void Player::take_turn() {
-    // roll to get actions
-    vector<Action> actions = roll();
+// decides how to do them, and does them
+void Player::take_turn(vector<Action> actions, vector<Player> fellow_gamers) {
 
     // do take-offs on worst planes
     for(int i = 0; i < actions.size(); i++) {
@@ -195,7 +143,7 @@ void Player::take_turn() {
             // find the worst plane
             Airplane worst_plane = planes[0];
             float worst_score = get_plane_score(worst_plane, true);
-            for(int j = 1; j < planes.size; j++) {
+            for(int j = 1; j < planes.size(); j++) {
                 float score = get_plane_score(planes[j], true);
                 if(score < worst_score) {
                     worst_plane = planes[j];
@@ -216,7 +164,7 @@ void Player::take_turn() {
     // if there are still moves left
     if(actions.size() > 0) {
         // decide how to move given those actions
-        vector<pair<Airplane, Action>> move_plan = decide_moves(actions);
+        vector<pair<Airplane, Action>> move_plan = decide_moves(actions, fellow_gamers);
 
         // do moves
         for(int i = 0; i < move_plan.size(); i++) {
@@ -231,18 +179,16 @@ void Player::take_turn() {
             planes.erase(planes.begin()+i);
             if(planes.size() == 0) {
                 finished == true;
-                if(DEBUG) {
+                // DEBUG
                     cout << "A Player has finished!\n";
-                }
             }
         }
         // check for bumps
         planes[i].check_bump(true);
     }
 
-    if(DEBUG) {
+    // debug
         cout << "\n\n";
-    }
 }
 
 // sync shadow location with real location for all planes
@@ -252,10 +198,15 @@ void Player::sync_planes() {
     }
 }
 
-Game* Player::get_game() const {
-    return game;
-}
-
 bool Player::is_done() const {
     return finished;
+}
+
+// default plane scoring, just goes by latitude of location
+float Player::get_plane_score(Airplane a, bool main_board) {
+    // really good if at end
+    if(a.get_loc_name(main_board) == "END") {
+        return 250;
+    }
+    return -(a.get_loc(main_board)->lon);
 }

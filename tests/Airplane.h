@@ -5,23 +5,26 @@
 #include <stdexcept>
 #include <algorithm>
 
-#include <unordered_map>
 #include <utility>
 #include <vector>
 #include <string>
 
-#include "Airport.h"
-#include "Player.h"
-#include "Action.h"
 #include "Color.h"
+#include "Action.h"
+#include "Airport.h"
+
+
+
+class Player;
 
 using std::vector, std::pair, std::string, std::cout;
 
 class Airplane {
     private:
-        std::unordered_map<string, Airport> map;
         Airport* location;
         Airport* shadow_location;
+        Airport* start;
+        Airport* end;
         const Player* owner;
 
         // airpost occupancy accessor function which accounts for main-shadow distinction
@@ -37,7 +40,7 @@ class Airplane {
         bool move(Airport* dest, bool main_board);
 
         // jumps plane to given destination (key), returns success of jump (false if dest does not exist in map)
-        bool jump(string dest, bool main_board);
+        bool jump(Airport* dest, bool main_board);
 
         // moves plane along its child route with the given color
         // returns true if route existed and plane was moved
@@ -47,7 +50,7 @@ class Airplane {
 
     public:
         // basic constructor, defaults position to start
-        Airplane(const Player* own = NULL, const string& loc = "START");
+        Airplane(const Player* own = NULL, Airport* loc = NULL, Airport* st = NULL, Airport* en = NULL);
         
         Airplane(const Airplane& other);
 
@@ -57,6 +60,7 @@ class Airplane {
 
         // checks whether plane should be bumping
         // returns whether bump occured
+        // throw std::domain_error if bumping own plane
         bool check_bump(bool main_board);
 
         // sync shadow location with real location
@@ -70,9 +74,6 @@ class Airplane {
         const Player* get_owner_ptr();
 
         void set_owner_ptr(Player* own);
-
-        void change_map(std::unordered_map<string, Airport> new_map);
-
 };
 
 #endif

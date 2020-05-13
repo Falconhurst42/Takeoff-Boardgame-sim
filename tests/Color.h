@@ -13,10 +13,18 @@ struct Color {
     const vector<string> DEFUALT_COLORS = {"red", "orange", "yellow", "green", "blue", "purple"};
 
     Color(string col = "white") : 
-        c ( std::toupper( col[0] ) ) {}
+        c ( std::toupper( col[0] ) ) {
+            if(col == "wild") {
+                c = '?';
+            }
+        }
 
     bool operator==(Color other) {
         return c == other.c;
+    }
+
+    void operator=(Color other) {
+        c = other.c;
     }
 };
 

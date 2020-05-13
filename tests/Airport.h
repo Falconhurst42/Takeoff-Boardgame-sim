@@ -5,8 +5,8 @@
 #include <vector>
 #include <string>
 
-#include "Airplane.h"
 #include "Color.h"
+#include "Airplane.h"
 
 using std::vector, std::pair, std::string;
 
@@ -18,7 +18,7 @@ struct Airport {
     vector<Airplane*> occupants;
     vector<Airplane*> shadow_occupants;
 
-    Airport(string n, float lati = 0, float longi = 0) : 
+    Airport(string n = "", float lati = 0, float longi = 0) : 
         name(n),
         lat(lati),
         lon(longi),
