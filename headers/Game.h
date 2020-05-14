@@ -16,7 +16,11 @@
 
 using std::vector, std::queue, std::pair, std::string, std::cout;
 
+// mode variables, set through game initializer but stored globally for convenience
 bool DEBUG(true);
+bool PM_TAKEOFF_BUMP(false);
+bool WILDS(true);
+bool TAKEOFFS(true);
 
 class Game {
     const vector<string> DEFUALT_COLORS = {"red", "orange", "yellow", "green", "blue", "purple"};
@@ -201,6 +205,22 @@ class Game {
                     if(main_board) {
                         owner->setback();
                         owner->bumped();
+                        // if PM_TAKE_OFF_BUMP, takeoff to the eastern hemisphere
+                        if(PM_TAKEOFF_BUMP && owner->is_over()) {
+                            Airport* dest = owner->get_game()->draw_takeoff();
+                            // so long as we're allowed to go there
+                            bool open(true);
+                            // if any plane on the destionation has the same owner us, don't go there
+                            for(int i = 0; i < dest->occupants.size(); i++) {
+                                if(dest->occupants[i]->get_owner_ptr() == owner) {
+                                    open = false;
+                                }
+                            }
+                            if(open) {
+                                do_action(Action(dest), true);
+                                owner->altered_bumped();
+                            }
+                        }
                     }
                 }
 
@@ -393,7 +413,7 @@ class Game {
 
                 // stores benchmarking data as <[total turns, bumpeD_count, bumpeR_count]
                 pair<vector<int>, vector<int>> turn_data;
-                int bumper_count, bumped_count;
+                int bumper_count, bumped_count, altered_bump_count;
 
                 const vector<string> DEFUALT_COLORS = {"red", "orange", "yellow", "green", "blue", "purple"};
 
@@ -534,17 +554,20 @@ class Game {
                         }
                     }
 
-                    // expand wilds
-                    // for each permutation
-                    for(int i = 0; i < action_permutations.size(); i++) {
-                        // for each action in the permutation
-                        for(int j = 0; j < action_permutations[i].size(); j++) {
-                            // if the action is wild
-                            if(action_permutations[i][j]->type == 'C' && action_permutations[i][j]->color.c == '?') {
-                                expand_wild_permutation(action_permutations, i);
-                                action_permutations.erase(action_permutations.begin()+i);
-                                i--;
-                                break;
+                    // if wilds are enabled
+                    if(WILDS) {
+                        // expand wilds
+                        // for each permutation
+                        for(int i = 0; i < action_permutations.size(); i++) {
+                            // for each action in the permutation
+                            for(int j = 0; j < action_permutations[i].size(); j++) {
+                                // if the action is wild
+                                if(action_permutations[i][j]->type == 'C' && action_permutations[i][j]->color.c == '?') {
+                                    expand_wild_permutation(action_permutations, i);
+                                    action_permutations.erase(action_permutations.begin()+i);
+                                    i--;
+                                    break;
+                                }
                             }
                         }
                     }
@@ -656,50 +679,53 @@ class Game {
                     finished(false),
                     over_pm(false),
                     bumped_count(0),
-                    bumper_count(0) {
+                    bumper_count(0),
+                    altered_bump_count(0) {
                         for(int i = 0; i < planes.size(); i++) {
                             planes[i].set_owner_ptr(this);
                         }
                     }
 
-                // takes moves, decides how to do them, and does them
+                // takes moves, decides how to do them, does them, tracks bumps, track planes at end, saves benchmarks
                 void take_turn(vector<Action> actions, vector<Player>& fellow_gamers) {
-                    // do take-offs on worst planes
-                    for(int i = 0; i < actions.size(); i++) {
-                        // if an action is a take-off
-                        if(actions[i].type == 'T') {
-                            // if the location of the take-off matches another ally plane, just delete it
-                            bool use_it(true);
-                            for(int p = 0; p < planes.size(); p++) {
-                                if(actions[i].dest == planes[p].get_loc(true)) {
-                                    use_it = false;
-                                    break;
-                                }
-                            }
-                            if(use_it) {
-                                // find the worst plane
-                                Airplane* worst_plane = &(planes[0]);
-                                float worst_score = get_plane_score(worst_plane, true);
-                                for(int j = 1; j < planes.size(); j++) {
-                                    float score = get_plane_score(&(planes[j]), true);
-                                    if(score < worst_score) {
-                                        worst_plane = &(planes[j]);
-                                        worst_score = score;
+                    // if takeoffs are enabled
+                    if(TAKEOFFS) {
+                        // do take-offs on worst planes
+                        for(int i = 0; i < actions.size(); i++) {
+                            // if an action is a take-off
+                            if(actions[i].type == 'T') {
+                                // if the location of the take-off matches another ally plane, just delete it
+                                bool use_it(true);
+                                for(int p = 0; p < planes.size(); p++) {
+                                    if(actions[i].dest == planes[p].get_loc(true)) {
+                                        use_it = false;
+                                        break;
                                     }
                                 }
-                                // and use the take-off on it
-                                worst_plane->do_action(actions[i], true);
-                            }
+                                if(use_it) {
+                                    // find the worst plane
+                                    Airplane* worst_plane = &(planes[0]);
+                                    float worst_score = get_plane_score(worst_plane, true);
+                                    for(int j = 1; j < planes.size(); j++) {
+                                        float score = get_plane_score(&(planes[j]), true);
+                                        if(score < worst_score) {
+                                            worst_plane = &(planes[j]);
+                                            worst_score = score;
+                                        }
+                                    }
+                                    // and use the take-off on it
+                                    worst_plane->do_action(actions[i], true);
+                                }
 
-                            // delete used take-off
-                            for(int j = i+1; j < actions.size(); j++) {
-                                actions[j-1] = actions[j];
+                                // delete used take-off
+                                for(int j = i+1; j < actions.size(); j++) {
+                                    actions[j-1] = actions[j];
+                                }
+                                actions.pop_back();
+                                i--;
                             }
-                            actions.pop_back();
-                            i--;
                         }
                     }
-
                     // if there are still moves left
                     if(actions.size() > 0) {
                         // decide how to move given those actions
@@ -746,6 +772,7 @@ class Game {
                                 turn_data.first.push_back(game->turn_num+1);
                                 turn_data.first.push_back(bumped_count);
                                 turn_data.first.push_back(bumper_count);
+                                turn_data.first.push_back(altered_bump_count);
                                 if(DEBUG)
                                     cout << get_name() << " has finished!\n";
                             }
@@ -766,6 +793,9 @@ class Game {
                             }
                         }
                         over_pm = over;
+                        if(over_pm) {
+                            int breaking = 0;
+                        }
                     }
 
                     if(DEBUG)
@@ -820,6 +850,14 @@ class Game {
                 void bumped() {
                     bumped_count++;
                 }
+
+                void altered_bumped() {
+                    altered_bump_count++;
+                }
+        
+                Game* get_game() {
+                    return game;
+                }
         };
 
 
@@ -832,19 +870,33 @@ class Game {
         std::unordered_map<string, Airport> map;
         queue<string> takeoff_pile, western_hemi, eastern_hemi;
         vector<Player> players;
+        vector<string> sides; // = {"red", "orange", "yellow", "green", "blue", "purple", "wild", "take-off"};
         const int NUM_OF_PLAYERS, PLANES_PER_PLAYER, MAX_TURNS;
         int turn_location, turn_num;
 
         vector<pair<string, pair<vector<int>, vector<int>>>> player_turn_datas;
         vector<vector<pair<string, pair<vector<int>, vector<int>>>>> game_datas;
     
-        Game(int player_count = 4, int planes_per_player = 4, int max_turns = 200, bool debug = false) : 
+        // (players, planes, pm_takeoff_bump, debug, max_turns)
+        Game(int player_count = 4, int planes_per_player = 4, bool pm_takeoff_bump = false, bool wilds = true, bool takeoffs = true, bool debug = false, int max_turns = 200) : 
             NUM_OF_PLAYERS(player_count), 
             PLANES_PER_PLAYER(planes_per_player), 
-            MAX_TURNS(max_turns) {
+            MAX_TURNS(max_turns),
+            sides(DEFUALT_COLORS) {
+            // update mode variables
                 DEBUG = debug;
+                PM_TAKEOFF_BUMP = pm_takeoff_bump;
+                WILDS = wilds;
+                TAKEOFFS = takeoffs;
             // init turn counters
                 turn_location = turn_num = 0;
+            // init sides
+                if(WILDS) {
+                    sides.push_back("wild");
+                }
+                if(TAKEOFFS) {
+                    sides.push_back("take-off");
+                }
             // generate Airports and connections
                 // end goal: pull airport data from .txt file and generate connections automatically
                 // intermediate: pull airport data from .txt file, data includes connections
@@ -947,6 +999,7 @@ class Game {
             int total_loser_turn(0);
             int total_player_turn(0);
             int total_bumps(0);
+            int total_altered_bumps(0);
             for(int g = 0; g < game_datas.size(); g++) {
                 // output player_turn_data
                 cout << "Results of Game #" << g+1 << ":\n";
@@ -963,6 +1016,9 @@ class Game {
                     }
                     total_player_turn += game_datas[g][i].second.first[0];
                     total_bumps += game_datas[g][i].second.first[1];
+                    if(PM_TAKEOFF_BUMP) {
+                        total_altered_bumps += game_datas[g][i].second.first[3];
+                    }
                     for(int j = 0; j < game_datas[g][i].second.second.size(); j++) {
                         cout << "      Plane #" << j+1 << " finished in " << game_datas[g][i].second.second[j]+1 << " turns.\n";
                     }
@@ -972,6 +1028,9 @@ class Game {
                  << "Losers took an average of " << total_loser_turn/(float)game_datas.size() << " turns to finish\n"
                  << "There were, on average, " << total_player_turn/(float)game_datas.size() << " total turns per game\n"
                  << "There were, on average, " << total_bumps/(float)game_datas.size() << " total bumps per game\n";
+            if(PM_TAKEOFF_BUMP) {
+                cout << "There were a total of " << total_altered_bumps << " altered bumps\n";
+            }
         }
 
         // game loop
@@ -1038,15 +1097,10 @@ class Game {
 
         // returns vector with Actions to be taken this turn
         vector<Action> roll(const Player* roller, int dice = 2) {
-            vector<string> sides(DEFUALT_COLORS); // = {"red", "orange", "yellow", "green", "blue", "purple", "wild", "take-off"};
-            sides.push_back("wild");
-            sides.push_back("take-off");
-            const int NUM_SIDES = sides.size();
-
             // get string versions
             vector<string> rolls(dice);
             for(int i = 0; i < dice; i++) {
-                rolls[i] = sides[rand()%NUM_SIDES];
+                rolls[i] = sides[rand()%sides.size()];
             }
 
             // handle doubles                                               FIX: (ONLY WORKS FOR dice = 2)
