@@ -10,12 +10,11 @@
 
 #include <unordered_map>
 #include <queue>
-#include <set>
 #include <utility>
 #include <vector>
 #include <string>
 
-using std::vector, std::queue, std::set, std::pair, std::string, std::cout;
+using std::vector, std::queue, std::pair, std::string, std::cout;
 
 bool DEBUG(true);
 
@@ -23,6 +22,9 @@ class Game {
     const vector<string> DEFUALT_COLORS = {"red", "orange", "yellow", "green", "blue", "purple"};
 
     public:
+        // I included these forward delcarations (not these exact ones, more like their ancestors) after 
+        // referencing kilojoules' answer to " “X does not name a type” error in C++ " (https://stackoverflow.com/questions/2133250/x-does-not-name-a-type-error-in-c/2133260) 
+        // when troubleshooting compile errors
         class Player;
         class Airplane;
         struct Airport;
@@ -37,6 +39,7 @@ class Game {
 
             // c char is assigned to capitalized first char of given string
             Color(string col = "white") : 
+            // referened http://www.cplusplus.com/reference/cctype/tolower/ (I know that's not quite the same function, but I switched it later)
                 c ( std::toupper( col[0] ) ) {
                     if(col == "wild") {
                         c = '?';
@@ -574,6 +577,7 @@ class Game {
                                 best_actions_used = actions_used;
                                 best_combo_indexes = std::make_pair(i, j);
                                 goto all_done;
+                                // referenced: "Goto stament in C/C++" from geeksforgeeks.com (https://www.geeksforgeeks.org/goto-statement-in-c-cpp/)
                             } 
 
                             // check bumps and add points
@@ -616,7 +620,8 @@ class Game {
                     }
                     return;
 
-                    // I'm using a goto, I know it's evil but I gotta break out of the doulbe for loop and this is really the most efficient way
+                    // I'm using a goto, I know it's evil but I gotta break out of the double for loop and this is really the most efficient way
+                    // referenced: "Goto stament in C/C++" from geeksforgeeks.com (https://www.geeksforgeeks.org/goto-statement-in-c-cpp/)
                     all_done:
                         for(int i = 0; i < actions.size(); i++) {
                             move_plan[i] = std::make_pair( (plane_permutations[best_combo_indexes.first][i]), 
