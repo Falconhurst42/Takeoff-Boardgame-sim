@@ -1,0 +1,4 @@
+4x4, Small map, 10 runs (split pile): (17.5, 34, 107.8)
+Winners took an average of 17.5 turns to finish
+Losers took an average of 34 turns to finish
+There were, on average, 107.8 total turns per game

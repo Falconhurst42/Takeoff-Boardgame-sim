@@ -161,7 +161,7 @@ class Game {
                 Airport* shadow_location;
                 Airport* start;
                 Airport* end;
-                const Player* owner;
+                Player* owner;
 
                 // airpost occupancy accessor function which accounts for main-shadow distinction
                 vector<Airplane*>& get_occupancy_special(Airport* loc, bool main_board)  {
@@ -196,6 +196,12 @@ class Game {
                     get_location_special(main_board) = start;
                     // update occupancy at start
                     get_occupancy_special(start, main_board).push_back(this);
+
+                    // update over_pm flag and bumped count
+                    if(main_board) {
+                        owner->setback();
+                        owner->bumped();
+                    }
                 }
 
                 // updates loc, returns nothing for now
@@ -258,7 +264,7 @@ class Game {
 
             public:
                 // basic constructor, defaults position to start
-                Airplane(Airport* loc = NULL, Airport* st = NULL, Airport* en = NULL, const Player* own = NULL) : 
+                Airplane(Airport* loc = NULL, Airport* st = NULL, Airport* en = NULL, Player* own = NULL) : 
                     owner(own), 
                     location(loc),
                     start(st),
@@ -317,20 +323,22 @@ class Game {
                             if( !(occ->operator[](i) == this || get_location_special(main_board) == start || get_location_special(main_board) == end ) ) {
                                 // if the plane has a different owner
                                 if(occ->operator[](i)->owner != owner) {
+                                    // update bumper count
                                     if(main_board) {
-                                        int breaking = 1;
+                                        owner->bumper();
                                     }
-                                    string bumped_name = occ->operator[](i)->owner->get_name();
+                                    const Player* bumped_owner = occ->operator[](i)->owner;
                                     occ->operator[](i)->bumped(main_board);
                                     did_the_thing = true;
-                                    if(main_board) {
-                                        cout << owner->get_name() << " bumped " << bumped_name << " on " << location->name << "! ";
+                                    if(main_board && DEBUG) {
+                                        cout << owner->get_name() << " bumped " << bumped_owner->get_name() << " on " << location->name << "! ";
                                     }
                                     // don't repeat
                                     i--;
                                 }
                                 // if same owner, problem!
                                 else {
+                                    // this exists to be a debug mode breakpoint that only activates on a real move, not a simulation
                                     if(main_board) {
                                         int breaking = 1;
                                     }
@@ -360,8 +368,12 @@ class Game {
                     return owner;
                 }
 
-                void set_owner_ptr(const Player* own) {
+                void set_owner_ptr(Player* own) {
                     owner = own;
+                }
+        
+                bool is_over(bool main_board) {
+                    return (get_location_special(main_board)->lon <= 0);
                 }
         };
     
@@ -377,8 +389,11 @@ class Game {
                 Color plane_color;
                 vector<Airplane> planes;
                 const float BUMP_VALUE = 20;
-                bool finished;
-                pair<int, vector<int>> turn_data;
+                bool finished, over_pm;
+
+                // stores benchmarking data as <[total turns, bumpeD_count, bumpeR_count]
+                pair<vector<int>, vector<int>> turn_data;
+                int bumper_count, bumped_count;
 
                 const vector<string> DEFUALT_COLORS = {"red", "orange", "yellow", "green", "blue", "purple"};
 
@@ -638,7 +653,10 @@ class Game {
                     game(g), 
                     planes(p), 
                     plane_color(c),
-                    finished(false) {
+                    finished(false),
+                    over_pm(false),
+                    bumped_count(0),
+                    bumper_count(0) {
                         for(int i = 0; i < planes.size(); i++) {
                             planes[i].set_owner_ptr(this);
                         }
@@ -696,7 +714,7 @@ class Game {
                         }
                     }
 
-                    // check for planes at end
+                    // check for planes/players at end
                     for(int i = 0; i < planes.size(); i++) {
                         // delete planes at end
                         if(planes[i].get_loc_name(true) == "END") {
@@ -725,7 +743,9 @@ class Game {
                             // if all planes finished, make note of it
                             if(planes.size() == 0) {
                                 finished = true;
-                                turn_data.first = game->turn_num+1;
+                                turn_data.first.push_back(game->turn_num+1);
+                                turn_data.first.push_back(bumped_count);
+                                turn_data.first.push_back(bumper_count);
                                 if(DEBUG)
                                     cout << get_name() << " has finished!\n";
                             }
@@ -735,6 +755,17 @@ class Game {
                     // check for bumps
                     for(int i = 0; i < planes.size(); i++) {
                         planes[i].check_bump(true);
+                    }
+                    // check for over_pm
+                    if(!over_pm) {
+                        bool over(true);
+                        for(int i = 0; i < planes.size(); i++) {
+                            planes[i].check_bump(true);
+                            if(!planes[i].is_over(true)) {
+                                over = false;
+                            }
+                        }
+                        over_pm = over;
                     }
 
                     if(DEBUG)
@@ -760,6 +791,10 @@ class Game {
                     return finished;
                 }
 
+                bool is_over() const {
+                    return over_pm;
+                }
+
                 string get_name() const {
                     string out("Player ");
                     out += plane_color.c;
@@ -770,8 +805,20 @@ class Game {
                     return planes;
                 }
         
-                pair<int, vector<int>> get_turn_data() const {
+                pair<vector<int>, vector<int>> get_turn_data() const {
                     return turn_data;
+                }
+        
+                void setback() {
+                    over_pm = false;
+                }
+        
+                void bumper() {
+                    bumper_count++;
+                }
+
+                void bumped() {
+                    bumped_count++;
                 }
         };
 
@@ -783,38 +830,21 @@ class Game {
     //----------------------------------------------*/
 
         std::unordered_map<string, Airport> map;
-        queue<string> takeoff_pile;
+        queue<string> takeoff_pile, western_hemi, eastern_hemi;
         vector<Player> players;
         const int NUM_OF_PLAYERS, PLANES_PER_PLAYER, MAX_TURNS;
         int turn_location, turn_num;
 
-        vector<pair<string, pair<int, vector<int>>>> player_turn_datas;
-        vector<vector<pair<string, pair<int, vector<int>>>>> game_datas;
+        vector<pair<string, pair<vector<int>, vector<int>>>> player_turn_datas;
+        vector<vector<pair<string, pair<vector<int>, vector<int>>>>> game_datas;
     
-        Game(int player_count = 4, int planes_per_player = 4, int max_turns = 200) : 
+        Game(int player_count = 4, int planes_per_player = 4, int max_turns = 200, bool debug = false) : 
             NUM_OF_PLAYERS(player_count), 
             PLANES_PER_PLAYER(planes_per_player), 
             MAX_TURNS(max_turns) {
+                DEBUG = debug;
+            // init turn counters
                 turn_location = turn_num = 0;
-            }
-
-        void run_game() {
-            new_game();
-            loop();
-            cout << "\n\n";
-        }
-
-        void new_game() {
-            // seed randomness
-                int seed = time(0);
-                //int seed = 1589430794;
-                if(DEBUG)
-                    cout << seed << '\n';
-                srand(seed);
-            
-            // update/reset game data
-                player_turn_datas.clear();
-
             // generate Airports and connections
                 // end goal: pull airport data from .txt file and generate connections automatically
                 // intermediate: pull airport data from .txt file, data includes connections
@@ -855,6 +885,24 @@ class Game {
                 Airport::connect(&(map.at("New York")), &(map.at("Los Angeles")), Color("yellow"));
                 Airport::connect(&(map.at("New York")), &(map.at("END")), Color("red"));
                 Airport::connect(&(map.at("END")), &(map.at("Los Angeles")), Color("green"));
+            }
+
+        void run_game() {
+            new_game();
+            loop();
+            cout << "\n\n";
+        }
+
+        void new_game() {
+            // seed randomness
+                int seed = time(0);
+                //int seed = 1589430794;
+                if(DEBUG)
+                    cout << seed << '\n';
+                srand(seed);
+            
+            // update/reset game data
+                player_turn_datas.clear();
 
             // initialize players
                 players.clear();
@@ -873,29 +921,57 @@ class Game {
                     }
                 }
 
-            // initialize take-off pile
-                while(!takeoff_pile.empty()) {
-                    takeoff_pile.pop();
+            // initialize take-off piles
+                while(!western_hemi.empty()) {
+                    western_hemi.pop();
+                }
+                while(!eastern_hemi.empty()) {
+                    eastern_hemi.pop();
                 }
                 for(auto it = map.begin(); it != map.end(); it++) {
                     // don't push start or end
                     if(!((*it).first == "START" || (*it).first == "END")) {
-                        takeoff_pile.push((*it).first);
+                        if((*it).second.lon > 0) {
+                            eastern_hemi.push((*it).first);
+                        }
+                        else {
+                            western_hemi.push((*it).first);
+                        }
+                        
                     }
                 }
         }
 
         void end_game() {
+            int total_winner_turn(0);
+            int total_loser_turn(0);
+            int total_player_turn(0);
+            int total_bumps(0);
             for(int g = 0; g < game_datas.size(); g++) {
                 // output player_turn_data
                 cout << "Results of Game #" << g+1 << ":\n";
                 for(int i = 0; i < game_datas[g].size(); i++) {
-                    cout << "   " << game_datas[g][i].first << " finshed in " << game_datas[g][i].second.first << " turns.\n";
+                    cout << "   " << game_datas[g][i].first << " finshed in " << game_datas[g][i].second.first[0] << " turns.\n"
+                         << "They got bumped " << game_datas[g][i].second.first[1] << " times and bumped other players " << game_datas[g][i].second.first[2] << " times.\n";
+                    // track winner turn
+                    if(i == 0) {
+                        total_winner_turn += game_datas[g][i].second.first[0];
+                    }
+                    // track loser turn
+                    else if(i == game_datas[g].size()-1) {
+                        total_loser_turn += game_datas[g][i].second.first[0];
+                    }
+                    total_player_turn += game_datas[g][i].second.first[0];
+                    total_bumps += game_datas[g][i].second.first[1];
                     for(int j = 0; j < game_datas[g][i].second.second.size(); j++) {
                         cout << "      Plane #" << j+1 << " finished in " << game_datas[g][i].second.second[j]+1 << " turns.\n";
                     }
                 }
             }
+            cout << "\nWinners took an average of " << total_winner_turn/(float)game_datas.size() << " turns to finish\n"
+                 << "Losers took an average of " << total_loser_turn/(float)game_datas.size() << " turns to finish\n"
+                 << "There were, on average, " << total_player_turn/(float)game_datas.size() << " total turns per game\n"
+                 << "There were, on average, " << total_bumps/(float)game_datas.size() << " total bumps per game\n";
         }
 
         // game loop
@@ -915,7 +991,7 @@ class Game {
                             cout << players[turn_location].get_name() << "'s turn:\n  ";
                         }
                         // take their turn
-                        players[turn_location].take_turn(roll(), players);
+                        players[turn_location].take_turn(roll(&(players[turn_location])), players);
 
                         // check for end, update flags and data accordingly
                         if(players[turn_location].is_done())
@@ -928,7 +1004,8 @@ class Game {
             cout << "All players have finished!\nFinishing data:\n";
             // output player_turn_data
             for(int i = 0; i < player_turn_datas.size(); i++) {
-                cout << "   " << player_turn_datas[i].first << " finshed in " << player_turn_datas[i].second.first << " turns.\n";
+                cout << "   " << player_turn_datas[i].first << " finshed in " << player_turn_datas[i].second.first[0] << " turns.\n";
+                cout << "They got bumped " << player_turn_datas[i].second.first[1] << " times and bumped other players " << player_turn_datas[i].second.first[2] << " times.\n";
                 for(int j = 0; j < player_turn_datas[i].second.second.size(); j++) {
                     cout << "      Plane #" << j+1 << " finished in " << player_turn_datas[i].second.second[j]+1 << " turns.\n";
                 }
@@ -937,12 +1014,16 @@ class Game {
         }
 
         // simulate drawing a take-off card
-        Airport* draw_takeoff() {
+        Airport* draw_takeoff(bool west = false) {
+            queue<string>* correct_pile(&eastern_hemi);
+            if(west) {
+                correct_pile = &western_hemi;
+            }
             // move the one we're drawing to the bottom
-            takeoff_pile.push(takeoff_pile.front());
-            takeoff_pile.pop();
+            correct_pile->push(correct_pile->front());
+            correct_pile->pop();
             // return the one on the bottom
-            return &(map.at(takeoff_pile.back()));
+            return &(map.at(correct_pile->back()));
         }
 
         // sync all shadow occupancies with regular occupancies and all shadow locations with regular locations
@@ -956,7 +1037,7 @@ class Game {
         }
 
         // returns vector with Actions to be taken this turn
-        vector<Action> roll(int dice = 2) {
+        vector<Action> roll(const Player* roller, int dice = 2) {
             vector<string> sides(DEFUALT_COLORS); // = {"red", "orange", "yellow", "green", "blue", "purple", "wild", "take-off"};
             sides.push_back("wild");
             sides.push_back("take-off");
@@ -979,7 +1060,7 @@ class Game {
             for(int i = 0; i < rolls.size(); i++) {
                 // generate takeoff action
                 if(rolls[i] == "take-off") {
-                    actions.emplace_back(draw_takeoff());
+                    actions.emplace_back(draw_takeoff(roller->is_over()));
                 }
                 // generate color action
                 else {
