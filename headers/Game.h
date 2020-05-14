@@ -244,7 +244,7 @@ class Game {
 
             public:
                 // basic constructor, defaults position to start
-                Airplane(const Player* own = NULL, Airport* loc = NULL, Airport* st = NULL, Airport* en = NULL) : 
+                Airplane(Airport* loc = NULL, Airport* st = NULL, Airport* en = NULL, const Player* own = NULL) : 
                     owner(own), 
                     location(loc),
                     start(st),
@@ -620,18 +620,28 @@ class Game {
                     for(int i = 0; i < actions.size(); i++) {
                         // if an action is a take-off
                         if(actions[i].type == 'T') {
-                            // find the worst plane
-                            Airplane* worst_plane = &(planes[0]);
-                            float worst_score = get_plane_score(worst_plane, true);
-                            for(int j = 1; j < planes.size(); j++) {
-                                float score = get_plane_score(&(planes[j]), true);
-                                if(score < worst_score) {
-                                    worst_plane = &(planes[j]);
-                                    worst_score = score;
+                            // if the location of the take-off matches another ally plane, just delete it
+                            bool use_it(true);
+                            for(int p = 0; p < planes.size(); p++) {
+                                if(actions[i].dest == planes[p].get_loc(true)) {
+                                    use_it = false;
+                                    break;
                                 }
                             }
-                            // and use the take-off on it
-                            worst_plane->do_action(actions[i], true);
+                            if(use_it) {
+                                // find the worst plane
+                                Airplane* worst_plane = &(planes[0]);
+                                float worst_score = get_plane_score(worst_plane, true);
+                                for(int j = 1; j < planes.size(); j++) {
+                                    float score = get_plane_score(&(planes[j]), true);
+                                    if(score < worst_score) {
+                                        worst_plane = &(planes[j]);
+                                        worst_score = score;
+                                    }
+                                }
+                                // and use the take-off on it
+                                worst_plane->do_action(actions[i], true);
+                            }
 
                             // delete used take-off
                             for(int j = i+1; j < actions.size(); j++) {
@@ -726,20 +736,12 @@ class Game {
 
         void new_game() {
             // seed randomness
-                //int seed = time(0);
-                int seed = 1589414314;
+                int seed = time(0);
+                //int seed = 1589428500;
                 if(DEBUG)
                     cout << seed << '\n';
                 srand(seed);
 
-                // initialize players
-                players.clear();
-                for(int i = 0; i < NUM_OF_PLAYERS; i++) {
-                    // make planes vector of right size
-                    vector<Airplane> temp_planes(PLANES_PER_PLAYER);
-                    // initialize player and add to vector
-                    players.emplace_back(this, temp_planes, DEFUALT_COLORS[i]);
-                }
                 // generate Airports and connections
                     // end goal: pull airport data from .txt file and generate connections automatically
                     // intermediate: pull airport data from .txt file, data includes connections
@@ -780,6 +782,15 @@ class Game {
                     Airport::connect(&(map.at("New York")), &(map.at("Los Angeles")), Color("yellow"));
                     Airport::connect(&(map.at("New York")), &(map.at("END")), Color("red"));
                     Airport::connect(&(map.at("END")), &(map.at("Los Angeles")), Color("green"));
+
+                // initialize players
+                players.clear();
+                for(int i = 0; i < NUM_OF_PLAYERS; i++) {
+                    // make planes vector of right size
+                    vector<Airplane> temp_planes(PLANES_PER_PLAYER, Airplane(&(map.at("START")), &(map.at("START")), &(map.at("END"))));
+                    // initialize player and add to vector
+                    players.emplace_back(this, temp_planes, DEFUALT_COLORS[i]);
+                }
 
                 // move all planes to start
                 for(int y = 0; y < NUM_OF_PLAYERS; y++) {
