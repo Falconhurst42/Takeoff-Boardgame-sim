@@ -49,8 +49,9 @@ class Game {
             }
 
             // assign chars to match
-            void operator=(Color other) {
+            const Color& operator=(const Color& other) {
                 c = other.c;
+                return *this;
             }
         };
     
@@ -98,7 +99,7 @@ class Game {
             }
 
             // match type and info
-            void operator=(const Action& other) {
+            const Action& operator=(const Action& other) {
                 type = other.type;
                 if(type == 'T') {
                     dest = other.dest;
@@ -106,6 +107,7 @@ class Game {
                 else {
                     color = other.color;
                 }
+                return *this;
             }
         };
 
@@ -763,13 +765,12 @@ class Game {
     //                                              \\
     //----------------------------------------------*/
 
-    //private:
         std::unordered_map<string, Airport> map;
         queue<string> takeoff_pile;
         vector<Player> players;
         const int NUM_OF_PLAYERS, PLANES_PER_PLAYER, MAX_TURNS;
         int turn_location, turn_num;
-    //public:
+    
         Game(int player_count = 4, int planes_per_player = 4, int max_turns = 200) : 
             NUM_OF_PLAYERS(player_count), 
             PLANES_PER_PLAYER(planes_per_player), 
@@ -785,8 +786,8 @@ class Game {
 
         void new_game() {
             // seed randomness
-                //int seed = time(0);
-                int seed = 1589430794;
+                int seed = time(0);
+                //int seed = 1589430794;
                 if(DEBUG)
                     cout << seed << '\n';
                 srand(seed);
