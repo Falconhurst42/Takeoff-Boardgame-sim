@@ -1,11 +1,14 @@
 #include "..\headers\Game.h"
 
 int main() {
-    Game test(1, 2, 100);
+    Game test(4, 4);
     while(true) {
         test.run_game();
-        cout << "Press any key for next simulation: ";
-        string temp;
+        cout << "\n\n\n\nPress any key for next simulation: ";
+        char temp;
         std::cin >> temp;
+        if(temp == 'n') {
+            break;
+        }
     }
 }

@@ -180,14 +180,23 @@ class Game {
 
                 // if plane gets bumped, do this
                 bool bumped(bool main_board) {
+                    // update ocupancy at location
+                    for(int i = 0; i < get_occupancy_special(get_location_special(main_board), main_board).size(); i++) {
+                        if(this == get_occupancy_special(get_location_special(main_board), main_board)[i]) {
+                            get_occupancy_special(get_location_special(main_board), main_board).erase(get_occupancy_special(get_location_special(main_board), main_board).begin()+i);
+                            break;
+                        }
+                    }
+                    // set location to start
                     get_location_special(main_board) = start;
+                    // update occupancy at start
                     get_occupancy_special(start, main_board).push_back(this);
                 }
 
                 // updates loc, returns nothing for now
                 bool move(Airport* dest, bool main_board) {
                     if(main_board && DEBUG && location != NULL) {
-                        cout << "Moved from " << location->name << " to " << dest->name << ". ";
+                        cout << "Moved from " << location->name << " to " << dest->name << ".\n  ";
                     }
                     // remove this plane from the old location
                     if(get_location_special(main_board) != NULL) {
@@ -207,7 +216,7 @@ class Game {
                 // jumps plane to given destination (key), returns true
                 bool jump(Airport* dest, bool main_board) {
                     // avoid stationary jumps
-                    if(get_location_special(main_board) == dest) {
+                    if(dest == get_location_special(main_board)) {
                         // in stationary jump, nothing needs to be done
                         return true;
                     }
@@ -257,6 +266,16 @@ class Game {
                     end(other.end),
                     owner(other.owner) {}
 
+                const Airplane& operator=(const Airplane& other) {
+                    location = other.location;
+                    shadow_location = other.shadow_location;
+                    start = other.start;
+                    end = other.end;
+                    owner = other.owner;
+
+                    return *this;
+                }
+
                 // does action (takeoff or color move)
                 // returns success
                 bool do_action(Action act, bool main_board) {
@@ -285,27 +304,30 @@ class Game {
                 bool check_bump(bool main_board) {
                     bool did_the_thing = false;
                     // if there are multiple planes here
-                    vector<Airplane*> occ = get_occupancy_special(get_location_special(main_board), main_board);
-                    if(occ.size() > 1) {
+                    vector<Airplane*>* occ = &(get_occupancy_special(get_location_special(main_board), main_board));
+                    if(occ->size() > 1) {
                         // for each plane
-                        for(int i = 0; i < occ.size(); i++) {
+                        for(int i = 0; i < occ->size(); i++) {
                             // if we aren't at a the start or end or bumping ourself
-                            if( !(occ[i] == this || get_location_special(main_board) == start || get_location_special(main_board) == end ) ) {
+                            if( !(occ->operator[](i) == this || get_location_special(main_board) == start || get_location_special(main_board) == end ) ) {
                                 // if the plane has a different owner
-                                if(occ[i]->owner != owner) {
-                                    occ[i]->bumped(main_board);
+                                if(occ->operator[](i)->owner != owner) {
+                                    if(main_board) {
+                                        int breaking = 1;
+                                    }
+                                    string bumped_name = occ->operator[](i)->owner->get_name();
+                                    occ->operator[](i)->bumped(main_board);
                                     did_the_thing = true;
                                     if(main_board) {
-                                        cout << "Bumped on " << location->name << "! ";
+                                        cout << owner->get_name() << " bumped " << bumped_name << " on " << location->name << "! ";
                                     }
+                                    // don't repeat
+                                    i--;
                                 }
                                 // if same owner, problem!
                                 else {
                                     if(main_board) {
-                                        int breaking = 0;
-                                    }
-                                    if(occ[i] == this) {
-                                        cout << "I AM A DUMMY";
+                                        int breaking = 1;
                                     }
                                     throw std::domain_error("trying to bump ally plane");
                                 }
@@ -333,7 +355,7 @@ class Game {
                     return owner;
                 }
 
-                void set_owner_ptr(Player* own) {
+                void set_owner_ptr(const Player* own) {
                     owner = own;
                 }
         };
@@ -347,8 +369,8 @@ class Game {
         class Player {
             private:
                 Game* game;
-                vector<Airplane> planes;
                 Color plane_color;
+                vector<Airplane> planes;
                 const float BUMP_VALUE = 20;
                 bool finished;
 
@@ -648,6 +670,7 @@ class Game {
                                 actions[j-1] = actions[j];
                             }
                             actions.pop_back();
+                            i--;
                         }
                     }
 
@@ -669,11 +692,27 @@ class Game {
                     for(int i = 0; i < planes.size(); i++) {
                         // delete planes at end
                         if(planes[i].get_loc_name(true) == "END") {
-                            planes.erase(planes.begin()+i);
+                            //planes.erase(planes.begin()+i);
+                            for(int e = i+1; e < planes.size(); e++) {
+                                // find [e]'s loc's occ pointer to [e]
+                                Airplane** occ_ptr;
+                                for(int p = 0; p < planes[e].get_loc(true)->occupants.size(); p++) {
+                                    if(&planes[e] == planes[e].get_loc(true)->occupants[p]) {
+                                        occ_ptr = &(planes[e].get_loc(true)->occupants[p]);
+                                    }
+                                }
+                                //DEBUG = false;
+                                (planes[e-1]) = (planes[e]);
+                                //DEBUG = true;
+                                *occ_ptr = &(planes[e-1]);
+                            }
+                            planes.pop_back();
+
+                            // if all planes finished, make note of it
                             if(planes.size() == 0) {
                                 finished = true;
                                 if(DEBUG)
-                                    cout << "A Player has finished!\n";
+                                    cout << get_name() << " has finished!\n";
                             }
                             i--;
                         }
@@ -705,6 +744,16 @@ class Game {
                 bool is_done() const {
                     return finished;
                 }
+
+                string get_name() const {
+                    string out("Player ");
+                    out += plane_color.c;
+                    return out;
+                }
+
+                vector<Airplane>& get_planes() {
+                    return planes;
+                }
         };
 
 
@@ -721,7 +770,7 @@ class Game {
         const int NUM_OF_PLAYERS, PLANES_PER_PLAYER, MAX_TURNS;
         int turn_location, turn_num;
     //public:
-        Game(int player_count = 4, int planes_per_player = 4, int max_turns = 100) : 
+        Game(int player_count = 4, int planes_per_player = 4, int max_turns = 200) : 
             NUM_OF_PLAYERS(player_count), 
             PLANES_PER_PLAYER(planes_per_player), 
             MAX_TURNS(max_turns) {
@@ -736,8 +785,8 @@ class Game {
 
         void new_game() {
             // seed randomness
-                int seed = time(0);
-                //int seed = 1589428500;
+                //int seed = time(0);
+                int seed = 1589430794;
                 if(DEBUG)
                     cout << seed << '\n';
                 srand(seed);
@@ -766,7 +815,7 @@ class Game {
                     Airport::connect(&(map.at("Dubai")), &(map.at("Sydney")), Color("yellow"));
                     Airport::connect(&(map.at("Dubai")), &(map.at("Beijing")), Color("yellow"));
                     Airport::connect(&(map.at("Kemton Park")), &(map.at("Beijing")), Color("purple"));
-                    Airport::connect(&(map.at("Kemton Park")), &(map.at("Sydney")), Color("yellow"));
+                    Airport::connect(&(map.at("Kemton Park")), &(map.at("Sydney")), Color("blue"));
                     Airport::connect(&(map.at("London")), &(map.at("Beijing")), Color("red"));
                     Airport::connect(&(map.at("London")), &(map.at("Dubai")), Color("orange"));
                     Airport::connect(&(map.at("London")), &(map.at("Kemton Park")), Color("green"));
@@ -792,9 +841,12 @@ class Game {
                     players.emplace_back(this, temp_planes, DEFUALT_COLORS[i]);
                 }
 
-                // move all planes to start
+                // move all planes to start and fix their owner pointers
                 for(int y = 0; y < NUM_OF_PLAYERS; y++) {
-                    players[y].gather_planes(&(map.at("START")));
+                    for(int p = 0; p < PLANES_PER_PLAYER; p++) {
+                        (map.at("START")).occupants.push_back(&(players[y].get_planes()[p]));
+                        players[y].get_planes()[p].set_owner_ptr(&(players[y]));
+                    }
                 }
 
                 // initialize take-off pile
@@ -814,10 +866,16 @@ class Game {
             bool someone_left(true);
             // while ther are turn and players left
             for(turn_num = 0; turn_num != MAX_TURNS && someone_left; turn_num++) {
+                if(DEBUG) {
+                    cout << "Turn #" << turn_num+1 << ":\n";
+                }
                 someone_left = false;
                 // have each player take their turn
                 for(turn_location = 0; turn_location < players.size(); turn_location++) {
                     if(!players[turn_location].is_done()) {
+                        if(DEBUG) {
+                            cout << players[turn_location].get_name() << "'s turn:\n  ";
+                        }
                         players[turn_location].take_turn(roll(), players);
                         if(!players[turn_location].is_done())
                             someone_left = true;
@@ -888,7 +946,7 @@ class Game {
                         out = actions[i].color.c;
                     cout << "(" << actions[i].type << ", " << out << "), ";
                 }
-                cout << " ]  "; 
+                cout << " ]\n  "; 
             }
 
             // return vector of actions
