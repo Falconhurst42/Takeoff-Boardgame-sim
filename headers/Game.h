@@ -378,6 +378,7 @@ class Game {
                 vector<Airplane> planes;
                 const float BUMP_VALUE = 20;
                 bool finished;
+                pair<int, vector<int>> turn_data;
 
                 const vector<string> DEFUALT_COLORS = {"red", "orange", "yellow", "green", "blue", "purple"};
 
@@ -715,9 +716,16 @@ class Game {
                             }
                             planes.pop_back();
 
+                            // BENCHMARKING: update turn data
+                            turn_data.second.push_back(game->turn_num);
+                            if(DEBUG) {
+                                cout << "Plane Finished! ";
+                            }
+
                             // if all planes finished, make note of it
                             if(planes.size() == 0) {
                                 finished = true;
+                                turn_data.first = game->turn_num+1;
                                 if(DEBUG)
                                     cout << get_name() << " has finished!\n";
                             }
@@ -761,6 +769,10 @@ class Game {
                 vector<Airplane>& get_planes() {
                     return planes;
                 }
+        
+                pair<int, vector<int>> get_turn_data() const {
+                    return turn_data;
+                }
         };
 
 
@@ -775,6 +787,9 @@ class Game {
         vector<Player> players;
         const int NUM_OF_PLAYERS, PLANES_PER_PLAYER, MAX_TURNS;
         int turn_location, turn_num;
+
+        vector<pair<string, pair<int, vector<int>>>> player_turn_datas;
+        vector<vector<pair<string, pair<int, vector<int>>>>> game_datas;
     
         Game(int player_count = 4, int planes_per_player = 4, int max_turns = 200) : 
             NUM_OF_PLAYERS(player_count), 
@@ -796,49 +811,52 @@ class Game {
                 if(DEBUG)
                     cout << seed << '\n';
                 srand(seed);
+            
+            // update/reset game data
+                player_turn_datas.clear();
 
-                // generate Airports and connections
-                    // end goal: pull airport data from .txt file and generate connections automatically
-                    // intermediate: pull airport data from .txt file, data includes connections
-                    // basic: manually initialize airports and connections
-                // make airports
+            // generate Airports and connections
+                // end goal: pull airport data from .txt file and generate connections automatically
+                // intermediate: pull airport data from .txt file, data includes connections
+                // basic: manually initialize airports and connections
+            // make airports
                 map.clear();
-                    map.insert(std::make_pair("START", Airport("START", 21.318611, 202.0775)));
-                    map.insert(std::make_pair("Atlanta", Airport("Atlanta", 33.636667, -84.428056)));
-                    map.insert(std::make_pair("Los Angeles", Airport("Los Angeles", 33.9425, -118.408056)));
-                    map.insert(std::make_pair("New York", Airport("New York", 40.639722, -73.778889)));
-                    map.insert(std::make_pair("Beijing", Airport("Beijing", 40.0725, 116.5975)));
-                    map.insert(std::make_pair("Dubai", Airport("Dubai", 25.252778, 55.364444)));
-                    map.insert(std::make_pair("London", Airport("London", 51.4775, -0.461389)));
-                    map.insert(std::make_pair("Sydney", Airport("Sydney", -33.946111, 151.177222)));
-                    map.insert(std::make_pair("Kemton Park", Airport("Kemton Park", -26.133333, 28.25)));
-                    map.insert(std::make_pair("END", Airport("END", 21.318611, -157.9225)));
+                map.insert(std::make_pair("START", Airport("START", 21.318611, 202.0775)));
+                map.insert(std::make_pair("Atlanta", Airport("Atlanta", 33.636667, -84.428056)));
+                map.insert(std::make_pair("Los Angeles", Airport("Los Angeles", 33.9425, -118.408056)));
+                map.insert(std::make_pair("New York", Airport("New York", 40.639722, -73.778889)));
+                map.insert(std::make_pair("Beijing", Airport("Beijing", 40.0725, 116.5975)));
+                map.insert(std::make_pair("Dubai", Airport("Dubai", 25.252778, 55.364444)));
+                map.insert(std::make_pair("London", Airport("London", 51.4775, -0.461389)));
+                map.insert(std::make_pair("Sydney", Airport("Sydney", -33.946111, 151.177222)));
+                map.insert(std::make_pair("Kemton Park", Airport("Kemton Park", -26.133333, 28.25)));
+                map.insert(std::make_pair("END", Airport("END", 21.318611, -157.9225)));
 
-                // make connections
-                    Airport::connect(&(map.at("START")), &(map.at("Beijing")), Color("red"));
-                    Airport::connect(&(map.at("START")), &(map.at("Sydney")), Color("green"));
-                    Airport::connect(&(map.at("Beijing")), &(map.at("Sydney")), Color("orange"));
-                    Airport::connect(&(map.at("Dubai")), &(map.at("Sydney")), Color("yellow"));
-                    Airport::connect(&(map.at("Dubai")), &(map.at("Beijing")), Color("yellow"));
-                    Airport::connect(&(map.at("Kemton Park")), &(map.at("Beijing")), Color("purple"));
-                    Airport::connect(&(map.at("Kemton Park")), &(map.at("Sydney")), Color("blue"));
-                    Airport::connect(&(map.at("London")), &(map.at("Beijing")), Color("red"));
-                    Airport::connect(&(map.at("London")), &(map.at("Dubai")), Color("orange"));
-                    Airport::connect(&(map.at("London")), &(map.at("Kemton Park")), Color("green"));
-                    Airport::connect(&(map.at("Dubai")), &(map.at("Kemton Park")), Color("purple"));
-                    Airport::connect(&(map.at("London")), &(map.at("New York")), Color("red"));
-                    Airport::connect(&(map.at("London")), &(map.at("Atlanta")), Color("green"));
-                    Airport::connect(&(map.at("Dubai")), &(map.at("Atlanta")), Color("red"));
-                    Airport::connect(&(map.at("Dubai")), &(map.at("New York")), Color("yellow"));
-                    Airport::connect(&(map.at("Kemton Park")), &(map.at("Atlanta")), Color("red"));
-                    Airport::connect(&(map.at("Los Angeles")), &(map.at("Atlanta")), Color("orange"));
-                    Airport::connect(&(map.at("New York")), &(map.at("Atlanta")), Color("blue"));
-                    Airport::connect(&(map.at("END")), &(map.at("Atlanta")), Color("purple"));
-                    Airport::connect(&(map.at("New York")), &(map.at("Los Angeles")), Color("yellow"));
-                    Airport::connect(&(map.at("New York")), &(map.at("END")), Color("red"));
-                    Airport::connect(&(map.at("END")), &(map.at("Los Angeles")), Color("green"));
+            // make connections
+                Airport::connect(&(map.at("START")), &(map.at("Beijing")), Color("red"));
+                Airport::connect(&(map.at("START")), &(map.at("Sydney")), Color("green"));
+                Airport::connect(&(map.at("Beijing")), &(map.at("Sydney")), Color("orange"));
+                Airport::connect(&(map.at("Dubai")), &(map.at("Sydney")), Color("yellow"));
+                Airport::connect(&(map.at("Dubai")), &(map.at("Beijing")), Color("yellow"));
+                Airport::connect(&(map.at("Kemton Park")), &(map.at("Beijing")), Color("purple"));
+                Airport::connect(&(map.at("Kemton Park")), &(map.at("Sydney")), Color("blue"));
+                Airport::connect(&(map.at("London")), &(map.at("Beijing")), Color("red"));
+                Airport::connect(&(map.at("London")), &(map.at("Dubai")), Color("orange"));
+                Airport::connect(&(map.at("London")), &(map.at("Kemton Park")), Color("green"));
+                Airport::connect(&(map.at("Dubai")), &(map.at("Kemton Park")), Color("purple"));
+                Airport::connect(&(map.at("London")), &(map.at("New York")), Color("red"));
+                Airport::connect(&(map.at("London")), &(map.at("Atlanta")), Color("green"));
+                Airport::connect(&(map.at("Dubai")), &(map.at("Atlanta")), Color("red"));
+                Airport::connect(&(map.at("Dubai")), &(map.at("New York")), Color("yellow"));
+                Airport::connect(&(map.at("Kemton Park")), &(map.at("Atlanta")), Color("red"));
+                Airport::connect(&(map.at("Los Angeles")), &(map.at("Atlanta")), Color("orange"));
+                Airport::connect(&(map.at("New York")), &(map.at("Atlanta")), Color("blue"));
+                Airport::connect(&(map.at("END")), &(map.at("Atlanta")), Color("purple"));
+                Airport::connect(&(map.at("New York")), &(map.at("Los Angeles")), Color("yellow"));
+                Airport::connect(&(map.at("New York")), &(map.at("END")), Color("red"));
+                Airport::connect(&(map.at("END")), &(map.at("Los Angeles")), Color("green"));
 
-                // initialize players
+            // initialize players
                 players.clear();
                 for(int i = 0; i < NUM_OF_PLAYERS; i++) {
                     // make planes vector of right size
@@ -847,7 +865,7 @@ class Game {
                     players.emplace_back(this, temp_planes, DEFUALT_COLORS[i]);
                 }
 
-                // move all planes to start and fix their owner pointers
+            // move all planes to start and fix their owner pointers
                 for(int y = 0; y < NUM_OF_PLAYERS; y++) {
                     for(int p = 0; p < PLANES_PER_PLAYER; p++) {
                         (map.at("START")).occupants.push_back(&(players[y].get_planes()[p]));
@@ -855,7 +873,7 @@ class Game {
                     }
                 }
 
-                // initialize take-off pile
+            // initialize take-off pile
                 while(!takeoff_pile.empty()) {
                     takeoff_pile.pop();
                 }
@@ -865,6 +883,19 @@ class Game {
                         takeoff_pile.push((*it).first);
                     }
                 }
+        }
+
+        void end_game() {
+            for(int g = 0; g < game_datas.size(); g++) {
+                // output player_turn_data
+                cout << "Results of Game #" << g+1 << ":\n";
+                for(int i = 0; i < game_datas[g].size(); i++) {
+                    cout << "   " << game_datas[g][i].first << " finshed in " << game_datas[g][i].second.first << " turns.\n";
+                    for(int j = 0; j < game_datas[g][i].second.second.size(); j++) {
+                        cout << "      Plane #" << j+1 << " finished in " << game_datas[g][i].second.second[j]+1 << " turns.\n";
+                    }
+                }
+            }
         }
 
         // game loop
@@ -878,17 +909,31 @@ class Game {
                 someone_left = false;
                 // have each player take their turn
                 for(turn_location = 0; turn_location < players.size(); turn_location++) {
+                    // if the player is still in the game
                     if(!players[turn_location].is_done()) {
                         if(DEBUG) {
                             cout << players[turn_location].get_name() << "'s turn:\n  ";
                         }
+                        // take their turn
                         players[turn_location].take_turn(roll(), players);
-                        if(!players[turn_location].is_done())
+
+                        // check for end, update flags and data accordingly
+                        if(players[turn_location].is_done())
+                            player_turn_datas.push_back(std::make_pair(players[turn_location].get_name(), players[turn_location].get_turn_data()));
+                        else 
                             someone_left = true;
                     }
                 }
             }
-            cout << "All players have finished!";
+            cout << "All players have finished!\nFinishing data:\n";
+            // output player_turn_data
+            for(int i = 0; i < player_turn_datas.size(); i++) {
+                cout << "   " << player_turn_datas[i].first << " finshed in " << player_turn_datas[i].second.first << " turns.\n";
+                for(int j = 0; j < player_turn_datas[i].second.second.size(); j++) {
+                    cout << "      Plane #" << j+1 << " finished in " << player_turn_datas[i].second.second[j]+1 << " turns.\n";
+                }
+            }
+            game_datas.push_back(player_turn_datas);
         }
 
         // simulate drawing a take-off card
