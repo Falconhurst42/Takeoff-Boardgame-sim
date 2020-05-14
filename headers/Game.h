@@ -304,6 +304,9 @@ class Game {
                                     if(main_board) {
                                         int breaking = 0;
                                     }
+                                    if(occ[i] == this) {
+                                        cout << "I AM A DUMMY";
+                                    }
                                     throw std::domain_error("trying to bump ally plane");
                                 }
                             }
@@ -533,6 +536,22 @@ class Game {
 
                             int score = 0;
 
+                            // check for ending 
+                            bool all_done(true);
+                            for(int p = 0; p < planes.size(); p++) {
+                                if(planes[p].get_loc_name(false) != "END") {
+                                    all_done = false;
+                                    break;
+                                }
+                            }
+                            // if this move would reach the end
+                            if(all_done) {
+                                best_score = score;
+                                best_actions_used = actions_used;
+                                best_combo_indexes = std::make_pair(i, j);
+                                goto all_done;
+                            } 
+
                             // check bumps and add points
                             for(int b = 0; b < planes.size(); b++) {
                                 // watch out for self-bumps, thrown as error
@@ -572,6 +591,15 @@ class Game {
                                                         (new Action(action_permutations[best_combo_indexes.second][i]->color)) );   // memory allocation is weird
                     }
                     return;
+
+                    // I'm using a goto, I know it's evil but I gotta break out of the doulbe for loop and this is really the most efficient way
+                    all_done:
+                        for(int i = 0; i < actions.size(); i++) {
+                            move_plan[i] = std::make_pair( (plane_permutations[best_combo_indexes.first][i]), 
+                                                            (new Action(action_permutations[best_combo_indexes.second][i]->color)) );   // memory allocation is weird
+                        }
+                        return;
+
                 }
             
             public:        
@@ -637,6 +665,7 @@ class Game {
                                 if(DEBUG)
                                     cout << "A Player has finished!\n";
                             }
+                            i--;
                         }
                     }
                     // check for bumps
@@ -697,8 +726,8 @@ class Game {
 
         void new_game() {
             // seed randomness
-                int seed = time(0);
-                //int seed = 1589406482;
+                //int seed = time(0);
+                int seed = 1589414314;
                 if(DEBUG)
                     cout << seed << '\n';
                 srand(seed);
