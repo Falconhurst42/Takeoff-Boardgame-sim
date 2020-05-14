@@ -2,6 +2,7 @@
 #define GAME_H_
 
 #include <iostream>
+#include <fstream>
 #include <stdexcept>
 #include <algorithm>
 #include <time.h>
@@ -897,46 +898,8 @@ class Game {
                 if(TAKEOFFS) {
                     sides.push_back("take-off");
                 }
-            // generate Airports and connections
-                // end goal: pull airport data from .txt file and generate connections automatically
-                // intermediate: pull airport data from .txt file, data includes connections
-                // basic: manually initialize airports and connections
-            // make airports
-                map.clear();
-                map.insert(std::make_pair("START", Airport("START", 21.318611, 202.0775)));
-                map.insert(std::make_pair("Atlanta", Airport("Atlanta", 33.636667, -84.428056)));
-                map.insert(std::make_pair("Los Angeles", Airport("Los Angeles", 33.9425, -118.408056)));
-                map.insert(std::make_pair("New York", Airport("New York", 40.639722, -73.778889)));
-                map.insert(std::make_pair("Beijing", Airport("Beijing", 40.0725, 116.5975)));
-                map.insert(std::make_pair("Dubai", Airport("Dubai", 25.252778, 55.364444)));
-                map.insert(std::make_pair("London", Airport("London", 51.4775, -0.461389)));
-                map.insert(std::make_pair("Sydney", Airport("Sydney", -33.946111, 151.177222)));
-                map.insert(std::make_pair("Kemton Park", Airport("Kemton Park", -26.133333, 28.25)));
-                map.insert(std::make_pair("END", Airport("END", 21.318611, -157.9225)));
-
-            // make connections
-                Airport::connect(&(map.at("START")), &(map.at("Beijing")), Color("red"));
-                Airport::connect(&(map.at("START")), &(map.at("Sydney")), Color("green"));
-                Airport::connect(&(map.at("Beijing")), &(map.at("Sydney")), Color("orange"));
-                Airport::connect(&(map.at("Dubai")), &(map.at("Sydney")), Color("yellow"));
-                Airport::connect(&(map.at("Dubai")), &(map.at("Beijing")), Color("yellow"));
-                Airport::connect(&(map.at("Kemton Park")), &(map.at("Beijing")), Color("purple"));
-                Airport::connect(&(map.at("Kemton Park")), &(map.at("Sydney")), Color("blue"));
-                Airport::connect(&(map.at("London")), &(map.at("Beijing")), Color("red"));
-                Airport::connect(&(map.at("London")), &(map.at("Dubai")), Color("orange"));
-                Airport::connect(&(map.at("London")), &(map.at("Kemton Park")), Color("green"));
-                Airport::connect(&(map.at("Dubai")), &(map.at("Kemton Park")), Color("purple"));
-                Airport::connect(&(map.at("London")), &(map.at("New York")), Color("red"));
-                Airport::connect(&(map.at("London")), &(map.at("Atlanta")), Color("green"));
-                Airport::connect(&(map.at("Dubai")), &(map.at("Atlanta")), Color("red"));
-                Airport::connect(&(map.at("Dubai")), &(map.at("New York")), Color("yellow"));
-                Airport::connect(&(map.at("Kemton Park")), &(map.at("Atlanta")), Color("red"));
-                Airport::connect(&(map.at("Los Angeles")), &(map.at("Atlanta")), Color("orange"));
-                Airport::connect(&(map.at("New York")), &(map.at("Atlanta")), Color("blue"));
-                Airport::connect(&(map.at("END")), &(map.at("Atlanta")), Color("purple"));
-                Airport::connect(&(map.at("New York")), &(map.at("Los Angeles")), Color("yellow"));
-                Airport::connect(&(map.at("New York")), &(map.at("END")), Color("red"));
-                Airport::connect(&(map.at("END")), &(map.at("Los Angeles")), Color("green"));
+            // initialize map
+                initialize_map();
             }
 
         void run_game() {
@@ -1060,13 +1023,15 @@ class Game {
                     }
                 }
             }
-            cout << "All players have finished!\nFinishing data:\n";
-            // output player_turn_data
-            for(int i = 0; i < player_turn_datas.size(); i++) {
-                cout << "   " << player_turn_datas[i].first << " finshed in " << player_turn_datas[i].second.first[0] << " turns.\n";
-                cout << "They got bumped " << player_turn_datas[i].second.first[1] << " times and bumped other players " << player_turn_datas[i].second.first[2] << " times.\n";
-                for(int j = 0; j < player_turn_datas[i].second.second.size(); j++) {
-                    cout << "      Plane #" << j+1 << " finished in " << player_turn_datas[i].second.second[j]+1 << " turns.\n";
+            if(DEBUG) {
+                cout << "All players have finished!\nFinishing data:\n";
+                // output player_turn_data
+                for(int i = 0; i < player_turn_datas.size(); i++) {
+                    cout << "   " << player_turn_datas[i].first << " finshed in " << player_turn_datas[i].second.first[0] << " turns.\n";
+                    cout << "They got bumped " << player_turn_datas[i].second.first[1] << " times and bumped other players " << player_turn_datas[i].second.first[2] << " times.\n";
+                    for(int j = 0; j < player_turn_datas[i].second.second.size(); j++) {
+                        cout << "      Plane #" << j+1 << " finished in " << player_turn_datas[i].second.second[j]+1 << " turns.\n";
+                    }
                 }
             }
             game_datas.push_back(player_turn_datas);
@@ -1137,6 +1102,58 @@ class Game {
 
             // return vector of actions
             return actions;
+        }
+
+        void initialize_map() {
+            // generate Airports and connections
+            map.clear();
+
+            // initialize file
+            std::ifstream map_source("map.txt");
+            if(!map_source.is_open()) {
+                throw std::runtime_error("can't find map.txt");
+            }
+            // read airports from file
+            string name;
+            float lati, longi;
+            // referenced Kerrek SB's answer to "Read file line by line using ifstream in C++" on Stack Overflow (https://stackoverflow.com/questions/7868936/read-file-line-by-line-using-ifstream-in-c)
+            // for this method of looping a file
+            while(map_source >> name >> lati >> longi) {
+                map.insert(std::make_pair(name, Airport(name, lati, longi)));
+            }
+        
+            vector<Airport*> connectees;
+            for(auto it = map.begin(); it != map.end(); it++) {
+                connectees.push_back(&(*it).second);
+            }
+            // sort by latittude
+            std::sort(connectees.begin(), connectees.end(), [](Airport* a, Airport* b) { return (a->lon > b->lon);});
+
+            // for each plane, starting in the east (don't bother with the last one)
+            for(int i = 0; i < connectees.size()-1; i++) {
+                // number of connections (1 to all colors)
+                int connections = 1+rand()%DEFUALT_COLORS.size();
+                // always make max connections for start
+                if(connectees[i]->name == "START") {
+                    connections = DEFUALT_COLORS.size();
+                }
+
+                vector<string> unused_colors(DEFUALT_COLORS);
+
+                // for the next (connections) airports in the vector
+                for(int j = i+1; j < connectees.size() && j-i <= connections; j++) {
+                    // select which color we are using
+                    int color_index = rand()%unused_colors.size();
+
+                    // make connection
+                    Airport::connect(connectees[i], connectees[j], Color(unused_colors[color_index]));
+
+                    cout << "Connected " << connectees[i]->name << " & " << connectees[j]->name << " with " << unused_colors[color_index] << '\n';
+
+                    // erase used color
+                    unused_colors.erase(unused_colors.begin()+color_index);
+                }
+            }
         }
 };
 

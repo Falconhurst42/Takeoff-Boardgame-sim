@@ -3,7 +3,7 @@
 
 ## What the program will need to do:
 > To simulate a game the program will need
-> - a `Game` object to store and handle the map (hash table), deck (queue), dice (function), and players (objects)
+> - a `Game` object to store and handle the map (hash table), deck (queue), dice (function), and players (objects) as well and compiling the benchmarking data
 > - `Airport` structures to populate the map as spaces, track the connections between spaces, and track the location of planes
 > - `Player` objects to store and handle `Airplane` objects as gameplay pieces. On their turn, the `Game` will tell a `Player` which actions they are allowed to take and a player must consider all the possibilites, choose the best one, and send those directions to the planes
 > - `Airplane` objects to serve as piece which should handle their movements. `Players` will send Airplanes `Actions` which the Airplane must parse and execute: locating their destination and updating the location-tracking of their current (soon to be former) `Airport`, their destination `Airport`, and their own internal locaion tracking
@@ -47,5 +47,7 @@ Works Cited. This includes any third party libraries used, any online sources an
 > John Dibling's answer to "C++ new operator scope" on StackOverflow (https://stackoverflow.com/questions/23508156/c-new-operator-scope) when troubleshooting memory scoping
 > 
 > kilojoules' answer to " “X does not name a type” error in C++ " (https://stackoverflow.com/questions/2133250/x-does-not-name-a-type-error-in-c/2133260) when troubleshooting compile errors
+> 
+> referenced Kerrek SB's answer to "Read file line by line using ifstream in C++" on Stack Overflow (https://stackoverflow.com/questions/7868936/read-file-line-by-line-using-ifstream-in-c) for his method of reading through a text file
 > 
 > General reference: http://www.cplusplus.com/reference/algorithm/, http://www.cplusplus.com/reference/vector/vector/, http://www.cplusplus.com/reference/map/map/, http://www.cplusplus.com/reference/cctype/tolower/, http://www.cplusplus.com/reference/queue/queue/, http://www.cplusplus.com/reference/set/set/set/, http://www.cplusplus.com/doc/tutorial/exceptions/

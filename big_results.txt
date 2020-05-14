@@ -1,0 +1,30 @@
+4 4 yyy 10 (everything)
+(33.9, 64.7, 207.1, 154.9, 0)
+    Winners took an average of 33.9 turns to finish
+    Losers took an average of 64.7 turns to finish
+    There were, on average, 207.1 total turns per game
+    There were, on average, 154.9 total bumps per game
+    There were a total of 0 altered bumps
+
+4 4 nyy 10 (no special bumps)
+(29.5, 57, 180.4, 132.1)
+    Winners took an average of 29.5 turns to finish
+    Losers took an average of 57 turns to finish
+    There were, on average, 180.4 total turns per game
+    There were, on average, 132.1 total bumps per game
+
+4 4 yny 10 (no wilds)
+(38.5, 68.8, 222.8, 133.8, 0)
+    Winners took an average of 38.5 turns to finish
+    Losers took an average of 68.8 turns to finish
+    There were, on average, 222.8 total turns per game
+    There were, on average, 133.8 total bumps per game
+    There were a total of 0 altered bumps
+
+4 4 yyn 10 (no takeoffs)
+(54.3, 103.8, 338.9, 360.7, 0)
+    Winners took an average of 54.3 turns to finish
+    Losers took an average of 103.8 turns to finish
+    There were, on average, 338.9 total turns per game
+    There were, on average, 360.7 total bumps per game
+    There were a total of 0 altered bumps
