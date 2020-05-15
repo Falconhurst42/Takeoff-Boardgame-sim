@@ -12,15 +12,21 @@
 > A Game will require:
 > - Game setup
 > - A main gameplay loop
+> - Game ending
 > 
 > Game setup will require:
-> - generating all `Players`, `Airplanes`, `Airports`, and connections between `Airports`, as well as initializing the map and deck
+> - generating all `Players`, `Airplanes`, `Airports`, and connections between `Airports`, as well as initializing the map and deck(s)
+> 
+> Game ending will involve:
+> - Variable cleanup(if necessary)
+> - Outputting benchmark data
 > 
 > The main gameplay loop will involve:
 > - Iterating through rounds
 > - Iterating through `player's` turns
 > - Rolling for `players` and sending them actions to use that turn
 > - Keeping track of when `players` or the `game` are finished
+> - Collecting benchmark data
 > 
 > Player's turns will involve
 > - Simulating all possible movements with given `actions` and `airplanes`
@@ -28,6 +34,7 @@
 > - Executing those movements by sending `actions` to the `airplanes`
 > - Handling bumping other `player's` `airplanes`
 > - Detecting when one or all of their `airplanes` have finished
+> - Collecting benchmark data
 
 Clear overview of the simulation and how all of the different elements work.
 

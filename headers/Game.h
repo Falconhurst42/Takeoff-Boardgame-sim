@@ -1,3 +1,17 @@
+// Ethan Worth
+// 5/14/2020
+// Data Structures Final Project
+
+// On file structures:
+//   This header file contains all of the code for running a Take-off simulation game
+//   I have tried splitting it into multiple files or even just into '.h' and 'cpp' but it will not compile
+//   This is due to the overall interconnectedness of the program, it won't compile unless everything is in the same place
+//   All of the code is contained within the Game class, even the other classes
+//   This is philosophically due to the fact that every class is designed to be used only within a Game object
+//   This is practially because it wouldn't compile otherwise
+
+// 
+
 #ifndef GAME_H_
 #define GAME_H_
 
@@ -24,6 +38,7 @@ bool WILDS(true);
 bool TAKEOFFS(true);
 
 class Game {
+    // stores the colors that are used by the game for players and connections
     const vector<string> DEFUALT_COLORS = {"red", "orange", "yellow", "green", "blue", "purple"};
 
     public:
@@ -39,9 +54,15 @@ class Game {
     //                Color Struct                  \\
     //                                              \\
     //----------------------------------------------*/
+    
+    // Color struct, denotes a color (or a wild) as a char
+    // Future: could hold rgb values of color as well
         struct Color {
+            //char denoting the first letter of the color ('R' for red) or a '?' for a wild
             char c;
 
+            // constructor
+            // Takes: (string) color = "white"
             // c char is assigned to capitalized first char of given string
             Color(string col = "white") : 
             // referened http://www.cplusplus.com/reference/cctype/tolower/ (I know that's not quite the same function, but I switched it later)
@@ -51,12 +72,16 @@ class Game {
                     }
                 }
 
-            // if chars match
+            // comparison operator, compares chars
+            // Takes: (const Color&) other
+            // Returns: (bool) c == other.c;
             bool operator==(const Color& other) const {
                 return c == other.c;
             }
 
-            // assign chars to match
+            // assignment operator (c = other.c)
+            // Takes: (const Color&) other
+            // Returns: (const Color&) *this
             const Color& operator=(const Color& other) {
                 c = other.c;
                 return *this;
@@ -68,27 +93,43 @@ class Game {
     //                Action Struct                 \\
     //                                              \\
     //----------------------------------------------*/
-        // valid actions: take-off or color-move
+        // Action structure, denotes an action an Airplane can take
+        // Color-move Actions: (char) type == 'C', 
+        //                     (Color) color == {color to be moved on, or wild}
+        // Take-off Actions: (char) type == 'T', 
+        //                   (Airport*) dest == {destination}
+        // Future: Color-move and Take-off should be derived classes?
+        //         Could an Action object have a function that takes an airplane and calls the proper movement function with the proper arguments? (would also need polymorphism?)
         struct Action {
-            char type;
-            Airport* dest;
-            Color color;
+            char type;      // 'C' for color move, 'T' for takeoff
+            Airport* dest;  // destination of takeoff
+            Color color;    // Color to be moved on for color move (can be wild, but the wild should be replaced before sending this to an Airplane)
 
             // blank constructor
+            // type(' ')
             Action() :
                 type(' ') {};
 
             // take-off constructor
+            // Takes: Airport* d
+            // type('T')
+            // dest(d)
             Action(Airport* d) :
                 type('T'),
                 dest(d) {}
 
             // color-move constructor
+            // Takes: Color c
+            // type('C')
+            // color(c)
             Action(Color c) :
                 type('C'),
                 color(c) {}
             
-            // if type and info match
+            // comparison operator
+            // Takes  (const Action&) other
+            // Returns: (bool) (type == other.type == 'T' && dest == other.dest) || (type == other.type == 'C' && color == other.color)
+            //          (if types and respective data match)
             bool operator==(const Action& other) const {
                 // both takeoff type
                 if(type == 'T' && other.type == 'T') {
@@ -106,7 +147,11 @@ class Game {
                 return false;
             }
 
-            // match type and info
+            // assignment operator
+            // Takes  (const Action&) other
+            //  type = other.type
+            //  {respective_data = other.respective_data}
+            // Returns: (const Action&) this*
             const Action& operator=(const Action& other) {
                 type = other.type;
                 if(type == 'T') {
@@ -418,55 +463,6 @@ class Game {
 
                 const vector<string> DEFUALT_COLORS = {"red", "orange", "yellow", "green", "blue", "purple"};
 
-                // referenced: "Print all possible strings of length k that can be formed from a set of n characters" from geeksforgeeks.com. https://www.geeksforgeeks.org/print-all-combinations-of-given-length/
-                //   while developing this algorithm
-                // and referenced zneak's answer from "Template container iterators" on StackOverflow https://stackoverflow.com/questions/30018517/template-container-iterators
-                //   for how to template with my iterators
-                template<typename It>
-                void get_all_permutations(vector<vector<typename It::value_type>>& output, It start, It end, int length, vector<typename It::value_type> prefix = vector<typename It::value_type>(0))  {
-                    // base case: length == 0
-                    // push prefix into output
-                    if(length == 0) {
-                        output.push_back(prefix);
-                        return;
-                    }
-
-                    // for every item in source
-                    It temp = start;
-                    while(temp != end) {
-                        // make a new prefix which is the old prefix plus the new item
-                        vector<typename It::value_type> new_prefix(prefix);
-                        new_prefix.push_back(*temp);
-                        // get all permutations with that prefix one size smaller
-                        get_all_permutations(output, start, end, length-1, new_prefix);
-                        temp++;
-                    }
-                }
-
-                template<typename It>
-                void get_all_permutations_no_repeats(vector<vector<typename It::value_type>>& output, It start, It end, int length, vector<typename It::value_type> prefix = vector<typename It::value_type>(0))  {
-                    
-                    // base case: length == 0
-                    // push prefix into output
-                    if(length == 0) {
-                        output.push_back(prefix);
-                        return;
-                    }
-
-                    // for every item in source
-                    It temp = start;
-                    while(temp != end) {
-                        // make a new prefix which is the old prefix plus the new item
-                        vector<typename It::value_type> new_prefix(prefix);
-                        new_prefix.push_back(*temp);
-                        // move used one to start
-                        std::swap(*temp, *start);
-                        // get all permutations with that prefix one size smaller
-                        get_all_permutations_no_repeats(output, start+1, end, length-1, new_prefix);
-                        temp++;
-                    }
-                }
-
                 void expand_wild_permutation(vector<vector<Action*>>& a_p, int ind) {
                     // copy
                     vector<Action*> expandee = a_p[ind];
@@ -686,6 +682,56 @@ class Game {
                             planes[i].set_owner_ptr(this);
                         }
                     }
+
+                                // referenced: "Print all possible strings of length k that can be formed from a set of n characters" from geeksforgeeks.com. https://www.geeksforgeeks.org/print-all-combinations-of-given-length/
+                //   while developing this algorithm
+                // and referenced zneak's answer from "Template container iterators" on StackOverflow https://stackoverflow.com/questions/30018517/template-container-iterators
+                //   for how to template with my iterators
+                template<typename It>
+                static void get_all_permutations(vector<vector<typename It::value_type>>& output, It start, It end, int length, vector<typename It::value_type> prefix = vector<typename It::value_type>(0))  {
+                    // base case: length == 0
+                    // push prefix into output
+                    if(length == 0) {
+                        output.push_back(prefix);
+                        return;
+                    }
+
+                    // for every item in source
+                    It temp = start;
+                    while(temp != end) {
+                        // make a new prefix which is the old prefix plus the new item
+                        vector<typename It::value_type> new_prefix(prefix);
+                        new_prefix.push_back(*temp);
+                        // get all permutations with that prefix one size smaller
+                        get_all_permutations(output, start, end, length-1, new_prefix);
+                        temp++;
+                    }
+                }
+
+                template<typename It>
+                static void get_all_permutations_no_repeats(vector<vector<typename It::value_type>>& output, It start, It end, int length, vector<typename It::value_type> prefix = vector<typename It::value_type>(0))  {
+                    
+                    // base case: length == 0
+                    // push prefix into output
+                    if(length == 0) {
+                        output.push_back(prefix);
+                        return;
+                    }
+
+                    // for every item in source
+                    It temp = start;
+                    while(temp != end) {
+                        // make a new prefix which is the old prefix plus the new item
+                        vector<typename It::value_type> new_prefix(prefix);
+                        new_prefix.push_back(*temp);
+                        // move used one to start
+                        std::swap(*temp, *start);
+                        // get all permutations with that prefix one size smaller
+                        get_all_permutations_no_repeats(output, start+1, end, length-1, new_prefix);
+                        temp++;
+                    }
+                }
+
 
                 // takes moves, decides how to do them, does them, tracks bumps, track planes at end, saves benchmarks
                 void take_turn(vector<Action> actions, vector<Player>& fellow_gamers) {
@@ -957,7 +1003,8 @@ class Game {
                 }
         }
 
-        void end_game() {
+        // returns [avg_win_turn, avg_lose_turn, avg_total_turn, avg_bumps(, avg_altered_bumps)]
+        vector<int> end_game() {
             int total_winner_turn(0);
             int total_loser_turn(0);
             int total_player_turn(0);
@@ -987,16 +1034,29 @@ class Game {
                     }
                 }
             }
-            cout << "\nWinners took an average of " << total_winner_turn/(float)game_datas.size() << " turns to finish\n"
-                 << "Losers took an average of " << total_loser_turn/(float)game_datas.size() << " turns to finish\n"
-                 << "There were, on average, " << total_player_turn/(float)game_datas.size() << " total turns per game\n"
-                 << "There were, on average, " << total_bumps/(float)game_datas.size() << " total bumps per game\n";
+
+            vector<int> output;
+            output.push_back(total_winner_turn/(float)game_datas.size());
+            output.push_back(total_loser_turn/(float)game_datas.size());
+            output.push_back(total_player_turn/(float)game_datas.size());
+            output.push_back(total_bumps/(float)game_datas.size());
             if(PM_TAKEOFF_BUMP) {
-                cout << "There were a total of " << total_altered_bumps << " altered bumps\n";
+                output.push_back(total_altered_bumps);
             }
+
+            cout << "\nWinners took an average of " << output[0] << " turns to finish\n"
+                 << "Losers took an average of " << output[1] << " turns to finish\n"
+                 << "There were, on average, " << output[2] << " total turns per game\n"
+                 << "There were, on average, " << output[3] << " total bumps per game\n";
+            if(PM_TAKEOFF_BUMP) {
+                cout << "There were a total of " << output[4] << " altered bumps\n";
+            }
+
+            return output;
         }
 
         // game loop
+        // returns [avg_win_turn, avg_lose_turn, avg_total_turn, avg_bumps(, avg_altered_bumps)]
         void loop() {
             bool someone_left(true);
             // while ther are turn and players left
@@ -1148,7 +1208,7 @@ class Game {
                     // make connection
                     Airport::connect(connectees[i], connectees[j], Color(unused_colors[color_index]));
 
-                    cout << "Connected " << connectees[i]->name << " & " << connectees[j]->name << " with " << unused_colors[color_index] << '\n';
+                    //cout << "Connected " << connectees[i]->name << " & " << connectees[j]->name << " with " << unused_colors[color_index] << '\n';
 
                     // erase used color
                     unused_colors.erase(unused_colors.begin()+color_index);
