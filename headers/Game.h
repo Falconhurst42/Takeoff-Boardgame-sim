@@ -32,10 +32,23 @@
 using std::vector, std::queue, std::pair, std::string, std::cout;
 
 // mode variables, set through game initializer but stored globally for convenience
-bool DEBUG(true);
-bool PM_TAKEOFF_BUMP(false);
-bool WILDS(true);
-bool TAKEOFFS(true);
+    // enables debug mode which has extra output trackng individual moves (significantly slows processing, don't use for large tests)
+    bool DEBUG(true);
+
+    // enables altered bumping. false by default 
+    // If a player has all their planes over the prime meridian and one of them gets bumped, they will draw an eastern-hemisphere takeoff for that plane instead of sending it back to the start
+    // has little effect on gameplay, no altered bumps have been recorded
+    bool PM_TAKEOFF_BUMP(false);
+
+    // enables wilds. true by default 
+    // (disabling wilds significantly speeds up simulation by eliminating the lengthy double-wild simulations)
+    // benchmarking: wilds noticably decrease game length and increase bumping
+    bool WILDS(true);
+    // enables takeoffs. true by default
+    // (has little effect on simulation speed or benchmarks)
+    bool TAKEOFFS(true);
+
+    // FUTURE: make main vs. shadow board a global flag instead of function parameter
 
 class Game {
     // stores the colors that are used by the game for players and connections
@@ -170,15 +183,35 @@ class Game {
     //                                              \\
     //----------------------------------------------*/
         
+    // Airport struct, represents a space on the board and stores its connections to other Airports/
+    // Future: include "country capital" flag, takeoffs would only be generated for country capitals
         struct Airport {
-            string name;        // used to check start and end, key and display name
+            // key for map hash, name if displayed
+            // the same as the IATA abbreviation for the airport
+            // start always has name "START", end always has name "END" (although that does mean I can't use Vance Airforce Base elsewhere on the map...)
+            string name;
+
+            // longitude and latitude of airport in real life
+            // the negative of longitude is used as a rudimentary measure of progress, with the START having very positive longitude and END having a very negative longitude
             float lat, lon;
-            // routes stored as <Airport*, Color>
+
+            // vectors storing outgoing (child) and incoming (parent) routes
+            // routes stored as pair<(Airport*) ptr to other end of route, (Color) color of route>
             vector<pair<Airport*, Color>> children, parents;
+
+            // vectors storing the spaces current occupants on the main board
+            // only START and END may have multiple occupants at the *end* of a turn
             vector<Airplane*> occupants;
+            // vectors storing the spaces current occupants on the "shadow" simulation board
+            // the shadow_occupants of every airport are synced to the real occupants at the start of every simulation
             vector<Airplane*> shadow_occupants;
 
-            // all-purpose consturctor
+            // all-purpose constructor
+            // Takes: (string) n = ""
+            //        (float) lati = 0
+            //        (float) longi = 0
+            // Does: name(n), lat(lati), lon(longi)
+            //       occupants(0, NULL), shadow_occupants(0, NULL)
             Airport(string n = "", float lati = 0, float longi = 0) : 
                 name(n),
                 lat(lati),
@@ -187,13 +220,18 @@ class Game {
                 shadow_occupants(0, NULL) {}
 
             // creates connection of given color between given aiports, enforcing right to left motion
+            // Takes: (Airport*) parent
+            //        (Airport*) child
+            //        (Color) c
+            // Note: before the connection is made, the function makes sure that the parent pointer is east of (before) the child pointer
+            //       if the pointers are in the wrong order, it swaps them before creating the connection
             static void connect(Airport* parent, Airport* child, Color c) {
                 // enforce right to left motion
                 if(child->lon > parent->lon) {
                     std::swap(parent, child);
                 }
 
-                // add connections
+                // add connections ot the airport's vectors
                 parent->children.push_back(std::make_pair(child, c));
                 child->parents.push_back(std::make_pair(parent, c));
             }
@@ -204,36 +242,58 @@ class Game {
     //               Airplane Class                 \\
     //                                              \\
     //----------------------------------------------*/
-        
+    
+    // Airplane class, represents a piece on the board and handles the movements and interactions of pieces
         class Airplane {
             private:
+                // pointer to the Airplane's current location on the real board
                 Airport* location;
+                // pointer to the Airplane's current location on the "shadow" simulation board
                 Airport* shadow_location;
+                // pointer to the Airport at the start of the map
+                // this means an Airplane can jump back to the start without having to access and search the map
                 Airport* start;
+                // pointer to the Airport at the end of the map
+                // this means an Airplane can jump forward to the end without having to access and search the map (not acutally done in gameplay currently)
                 Airport* end;
+                // pointer to the player that owns this piece, important when evaluating whether you are bumping an enemy plane or intruding on an ally's space
                 Player* owner;
 
-                // airpost occupancy accessor function which accounts for main-shadow distinction
-                vector<Airplane*>& get_occupancy_special(Airport* loc, bool main_board)  {
-                    if(main_board) {
-                        return loc->occupants;
+                // Special accessors:
+                // these access private functions take a "main_board" flag and return the variable for the main or shadow board depending on that flag
+                // these functions allow us to use the same functions for simulating movements on the shadow board and actually perfomring them on the main board
+                // FUTURE: these functions really should return pointers to the vectors instead of the vectors themselves
+                    // get the occupancy of the given airpost, accounting for main-shadow distinction
+                    // Takes: (Airport*) location to get the occupancy
+                    //        (bool) whether to get the real occupancy or the shadow_occupancy
+                    // Returns: (vector<Airplane*>&) the correct occupancy vector for that space
+                    vector<Airplane*>& get_occupancy_special(Airport* loc, bool main_board)  {
+                        if(main_board) {
+                            return loc->occupants;
+                        }
+                        else {
+                            return loc->shadow_occupants;
+                        }
                     }
-                    else {
-                        return loc->shadow_occupants;
-                    }
-                }
 
-                // access location variable, which one depends on main-shadow flag
-                Airport*& get_location_special(bool main_board) {
-                    if(main_board) {
-                        return location;
+                    // get the location of this airplane, accounting for main-shadow distinction
+                    // Takes: (bool) whether to get the real location or the shadow_location
+                    // Returns: (Airport*&) the correct location for this plane
+                    Airport*& get_location_special(bool main_board) {
+                        if(main_board) {
+                            return location;
+                        }
+                        else {
+                            return shadow_location;
+                        }
                     }
-                    else {
-                        return shadow_location;
-                    }
-                }
 
-                // if plane gets bumped, do this
+                // function run when a plane gets bumped, accounts for shadow-main board distinction
+                // moves the plane to the start, handling all location and occupancy tracking
+                // also handles the owner's bumped_count benchmark and over_pm flag
+                // if altered bumping is enabled, handles that
+                // Takes: (bool) main_board
+                // Returns: (bool) {unused for now}
                 bool bumped(bool main_board) {
                     // update ocupancy at location
                     for(int i = 0; i < get_occupancy_special(get_location_special(main_board), main_board).size(); i++) {
@@ -248,6 +308,7 @@ class Game {
                     get_occupancy_special(start, main_board).push_back(this);
 
                     // update over_pm flag and bumped count
+                    // handle altered bumps
                     if(main_board) {
                         owner->setback();
                         owner->bumped();
@@ -270,7 +331,10 @@ class Game {
                     }
                 }
 
-                // updates loc, returns nothing for now
+                // moves this plane to the given Airport (on the main or shadow board depending on the flag)
+                // Takes: (Airport*) destination
+                //        (bool) main_board
+                // Returns: (bool) {unused for now}
                 bool move(Airport* dest, bool main_board) {
                     if(main_board && DEBUG && location != NULL) {
                         cout << "Moved from " << location->name << " to " << dest->name << ".\n  ";
@@ -290,7 +354,11 @@ class Game {
                     return true;            
                 }
 
-                // jumps plane to given destination (key), returns true
+                // jumps plane to given destination, returns true
+                // FUTURE: redundant function since map rework, can be replaced with move in a scenarios
+                // Takes: (Airport*) destination
+                //        (bool) main_board
+                // Returns: (bool) {unused for now}
                 bool jump(Airport* dest, bool main_board) {
                     // avoid stationary jumps
                     if(dest == get_location_special(main_board)) {
@@ -303,7 +371,10 @@ class Game {
                 }
 
                 // moves plane along its child route with the given color
-                // returns true if route existed and plane was moved
+                // returns true if route existed and plane was moved, false otherwise
+                // Takes: (Color) route color
+                //        (bool) main_board
+                // Returns: (bool) valid_route
                 bool move_route(Color c, bool main_board) {
                     // find destination
                     Airport* dest = identify_dest(c, main_board);
@@ -315,6 +386,9 @@ class Game {
                 }
 
                 // trace color route to destination (if it exists)
+                // Takes: (Color) route color
+                //        (bool) main_board
+                // Returns: (Airport*) destination
                 Airport* identify_dest(Color c, bool main_board) {
                     Airport* loc = get_location_special(main_board);
                     for (int i = 0; i < loc->children.size(); i++) {
@@ -330,19 +404,32 @@ class Game {
 
             public:
                 // basic constructor, defaults position to start
+                // Takes: (Airport*) location
+                //        (Airport*) start
+                //        (Airport*) end
+                //        (Player*) owner
                 Airplane(Airport* loc = NULL, Airport* st = NULL, Airport* en = NULL, Player* own = NULL) : 
                     owner(own), 
                     location(loc),
                     start(st),
-                    end(en) {}
+                    end(en) {
+                        if(loc == NULL) {
+                            loc = start;
+                        }
+                    }
                 
                 // copy constructor
+                // Takes: (const Airplane&) other
                 Airplane(const Airplane& other) :
                     location(other.location),
                     start(other.start),
                     end(other.end),
                     owner(other.owner) {}
 
+                // assignment operator
+                // Takes: (const Airplane&) other
+                // Does: copies all pointers
+                // Returns: (const Airplane&) *this
                 const Airplane& operator=(const Airplane& other) {
                     location = other.location;
                     shadow_location = other.shadow_location;
@@ -353,8 +440,10 @@ class Game {
                     return *this;
                 }
 
-                // does action (takeoff or color move)
-                // returns success
+                // given an action, calls the proper function to perform that action
+                // Takes: (Action) act
+                //        (bool) main_board
+                // Return: (bool) valid action
                 bool do_action(Action act, bool main_board) {
                     // move takeoff
                     if(act.type == 'T') {
@@ -376,8 +465,9 @@ class Game {
                 }
 
                 // checks whether plane should be bumping
-                // returns whether bump occured
-                // throws std::domain_error if bumping own plane
+                // Takes: (bool) main_board
+                // Returns: (bool) bumped
+                // Throws: (std::domain_error) intruding on ally
                 bool check_bump(bool main_board) {
                     bool did_the_thing = false;
                     // if there are multiple planes here
@@ -416,12 +506,12 @@ class Game {
                     return did_the_thing;
                 }
 
-                // sync shadow location with real location
+                // syncs shadow location with real location
                 void sync() {
                     shadow_location = location;
                 }
 
-                // Accessors
+                // Board-sensitive accessors
                 string get_loc_name(bool main_board) {
                     return get_location_special(main_board)->name;
                 }
@@ -430,6 +520,11 @@ class Game {
                     return get_location_special(main_board);
                 }
 
+                bool is_over(bool main_board) {
+                    return (get_location_special(main_board)->lon <= 0);
+                }
+
+                // owner accessor and setter
                 const Player* get_owner_ptr() {
                     return owner;
                 }
@@ -437,10 +532,7 @@ class Game {
                 void set_owner_ptr(Player* own) {
                     owner = own;
                 }
-        
-                bool is_over(bool main_board) {
-                    return (get_location_special(main_board)->lon <= 0);
-                }
+    
         };
     
     /*----------------------------------------------\\
@@ -448,21 +540,40 @@ class Game {
     //                Player Class                  \\
     //                                              \\
     //----------------------------------------------*/
-        
+    
+    // Player class, handles decisionmaking and giving commands to planes, as well as tracking and compiling benchmarking data
         class Player {
             private:
+                // pointer to the Game this player belongs to
                 Game* game;
+                // this player's color
                 Color plane_color;
+                // this player's planes
                 vector<Airplane> planes;
+                // how much this player values bumping other players
+                // FUTURE: make this value a coefficient to be multiplied by adjusted enemy plane score (negative plus 180) (will prioritize planes further along)
                 const float BUMP_VALUE = 20;
+                // flags for a player who has all their finished or over the prime meridian
                 bool finished, over_pm;
 
-                // stores benchmarking data as <[total turns, bumpeD_count, bumpeR_count]
+                // stores benchmarking data as pair<[total turns, bumpeD_count, bumpeR_count], [turns to finish first plane, turns to finish second plane, etc]
                 pair<vector<int>, vector<int>> turn_data;
+                // counters for how many times this player has bumped, been bumped, or been altered-bumped
                 int bumper_count, bumped_count, altered_bump_count;
 
+                // "defualt" colors list
                 const vector<string> DEFUALT_COLORS = {"red", "orange", "yellow", "green", "blue", "purple"};
 
+                // Takes: (vector<vector<Action*>>& a_p) a vector of permutations of action which is known to have wilds
+                //        (int) the index of the permutation known to have a wild
+                // Does: makes a copy of the permutation in question
+                //       counts the wilds in the copy and replaces them with NULL pointers
+                //       generates all possible permutations of color with a length equal to the number of wilds
+                //       for each permutation of colors, makes a new permutation of actions based off the copy with blanks
+                //          fills the blanks in the action permutation with color-move actions correspondign to the colors in the current color permutation
+                //          pushes the completed action permutation onto the vector of permutations of actions
+                // IMPROVE: The location of wild permutations and their deletion after expansion is handled in a loop in decide_moves when it really should be it's own function
+                // Returns: it adds permutations to the vector
                 void expand_wild_permutation(vector<vector<Action*>>& a_p, int ind) {
                     // copy
                     vector<Action*> expandee = a_p[ind];
@@ -503,7 +614,10 @@ class Game {
                     }      
                 }
 
-                // default plane scoring, just goes by longitude of location
+                // basic plane scoring, just goes by longitude of location
+                // Takes: (Airplane*) given plane
+                //        (bool) main_board
+                // Returns: (float) score of given plane
                 float get_plane_score(Airplane* a, bool main_board)  {
                     // really good if at end
                     if(a->get_loc_name(main_board) == "END") {
@@ -513,7 +627,18 @@ class Game {
                 }
 
                 // given a set of actions, returns best movement plan
-                void decide_moves(vector<pair<Airplane*, Action*>>& move_plan, vector<Action> actions, vector<Player>& fellow_gamers)  {
+                // Takes: (vector<pair<Airplane*, Action*>>&) move_plan to be filled out
+                //        (vector<Action>) actions to be taken
+                // Does: Gets all possible orders that the given actions could be done and the order they can be applied to planes
+                //       eliminates (adjacent) duplicate permutations and expands those with wilds
+                //       Checks every permutation and selects the best one
+                //          iterates through every combination of player permutation and action permutation
+                //          simulates those movements on the shadow board
+                //          scores the move plan based on the planes on the shadow board (extra points for bumping another player)
+                //          tracks the move plan with the best score
+                //       returns the best move_plan
+                // IMPROVE: pretty much everything in here should be done in its own function
+                void decide_moves(vector<pair<Airplane*, Action*>>& move_plan, vector<Action> actions)  {
                     // decide what to do with rolls
                     // find every permutation of planes with length equal to number of actions (including repeated planes)
                     // permutations are tracked with pointers to ensure that operations are performed on base planes, not copies
@@ -532,7 +657,7 @@ class Game {
                         action_pointers[i] = &(actions[i]);
                     }
                     get_all_permutations_no_repeats(action_permutations, action_pointers.begin(), action_pointers.end(), actions.size());
-                    // remove duplicate move permutations
+                    // remove (adjacent) duplicate move permutations
                     // for each permutation
                     for(int i = 1; i < action_permutations.size(); i++) {
                         // compare to previous permutation
@@ -669,6 +794,12 @@ class Game {
             
             public:        
                 // default constructor
+                // Takes: (Game*) g
+                //        (vector<Airplane>) pl
+                //        (Color) c 
+                // Does: copies given values
+                //       initilizes counters and flags
+                //       sets the owner pointers of given planes
                 Player(Game* g, vector<Airplane> p, Color c) :
                     game(g), 
                     planes(p), 
@@ -683,57 +814,81 @@ class Game {
                         }
                     }
 
-                                // referenced: "Print all possible strings of length k that can be formed from a set of n characters" from geeksforgeeks.com. https://www.geeksforgeeks.org/print-all-combinations-of-given-length/
-                //   while developing this algorithm
-                // and referenced zneak's answer from "Template container iterators" on StackOverflow https://stackoverflow.com/questions/30018517/template-container-iterators
+                // Permutation functions:
+                // referenced: "Print all possible strings of length k that can be formed from a set of n characters" from geeksforgeeks.com. https://www.geeksforgeeks.org/print-all-combinations-of-given-length/
+                //   while developing these algorithms
+                // referenced zneak's answer from "Template container iterators" on StackOverflow https://stackoverflow.com/questions/30018517/template-container-iterators
                 //   for how to template with my iterators
-                template<typename It>
-                static void get_all_permutations(vector<vector<typename It::value_type>>& output, It start, It end, int length, vector<typename It::value_type> prefix = vector<typename It::value_type>(0))  {
-                    // base case: length == 0
-                    // push prefix into output
-                    if(length == 0) {
-                        output.push_back(prefix);
-                        return;
+                    // get all permutations of a container of a given length and add them to the given storage container, allowing items to be repeated in a permutation
+                    // Takes: (vector<vector<typename It::value_type>>&) output storage
+                    //        (It) starting iterator
+                    //        (It) ending iterator
+                    //        (int) length
+                    //        (vector<typename It::value_type>) prefix {nothing by default, used for recursion}
+                    template<typename It>
+                    static void get_all_permutations(vector<vector<typename It::value_type>>& output, It start, It end, int length, vector<typename It::value_type> prefix = vector<typename It::value_type>(0))  {
+                        // base case: length == 0
+                        // push prefix into output
+                        if(length == 0) {
+                            output.push_back(prefix);
+                            return;
+                        }
+
+                        // for every item in source
+                        It temp = start;
+                        while(temp != end) {
+                            // make a new prefix which is the old prefix plus the new item
+                            vector<typename It::value_type> new_prefix(prefix);
+                            new_prefix.push_back(*temp);
+                            // get all permutations with that prefix one size smaller
+                            get_all_permutations(output, start, end, length-1, new_prefix);
+                            temp++;
+                        }
                     }
 
-                    // for every item in source
-                    It temp = start;
-                    while(temp != end) {
-                        // make a new prefix which is the old prefix plus the new item
-                        vector<typename It::value_type> new_prefix(prefix);
-                        new_prefix.push_back(*temp);
-                        // get all permutations with that prefix one size smaller
-                        get_all_permutations(output, start, end, length-1, new_prefix);
-                        temp++;
-                    }
-                }
+                    // get all permutations of a container of a given length and add them to the given storage container, NOT allowing items to be repeated in a permutation
+                    // Takes: (vector<vector<typename It::value_type>>&) output storage
+                    //        (It) starting iterator
+                    //        (It) ending iterator
+                    //        (int) length
+                    //        (vector<typename It::value_type>) prefix {nothing by default, used for recursion}
+                    template<typename It>
+                    static void get_all_permutations_no_repeats(vector<vector<typename It::value_type>>& output, It start, It end, int length, vector<typename It::value_type> prefix = vector<typename It::value_type>(0))  {
+                        
+                        // base case: length == 0
+                        // push prefix into output
+                        if(length == 0) {
+                            output.push_back(prefix);
+                            return;
+                        }
 
-                template<typename It>
-                static void get_all_permutations_no_repeats(vector<vector<typename It::value_type>>& output, It start, It end, int length, vector<typename It::value_type> prefix = vector<typename It::value_type>(0))  {
-                    
-                    // base case: length == 0
-                    // push prefix into output
-                    if(length == 0) {
-                        output.push_back(prefix);
-                        return;
+                        // for every item in source
+                        It temp = start;
+                        while(temp != end) {
+                            // make a new prefix which is the old prefix plus the new item
+                            vector<typename It::value_type> new_prefix(prefix);
+                            new_prefix.push_back(*temp);
+                            // move used one to start
+                            std::swap(*temp, *start);
+                            // get all permutations with that prefix one size smaller
+                            get_all_permutations_no_repeats(output, start+1, end, length-1, new_prefix);
+                            temp++;
+                        }
                     }
-
-                    // for every item in source
-                    It temp = start;
-                    while(temp != end) {
-                        // make a new prefix which is the old prefix plus the new item
-                        vector<typename It::value_type> new_prefix(prefix);
-                        new_prefix.push_back(*temp);
-                        // move used one to start
-                        std::swap(*temp, *start);
-                        // get all permutations with that prefix one size smaller
-                        get_all_permutations_no_repeats(output, start+1, end, length-1, new_prefix);
-                        temp++;
-                    }
-                }
 
 
                 // takes moves, decides how to do them, does them, tracks bumps, track planes at end, saves benchmarks
+                // Takes: (vector<Action>) actions for this turn
+                //        (vector<Player>&) player list
+                // Does: First, the function uses any take-off actions
+                //          it checks to makes sure they don't already have a plane on the destination (if it does, it just wastes the take-off)
+                //          it finds their plane with the worst score and uses the take-ff on it
+                //       If there are still actions left, call another function to decide how to use the remaining move, then execute them
+                //       check each plane to see if it is at the end space, if so delete it from the list
+                //          if that was the last plane, mark this player as finished
+                //       check each plane to see if its bumping another plane
+                //       check if every plane is over the prime meridian, if so update the flag for that
+                // IMPROVE: the expenditure of take-offs could be its own function
                 void take_turn(vector<Action> actions, vector<Player>& fellow_gamers) {
                     // if takeoffs are enabled
                     if(TAKEOFFS) {
@@ -777,7 +932,7 @@ class Game {
                     if(actions.size() > 0) {
                         // decide how to move given those actions
                         vector<pair<Airplane*, Action*>> move_plan(actions.size());
-                        decide_moves(move_plan, actions, fellow_gamers);
+                        decide_moves(move_plan, actions);
 
                         // do moves
                         for(int i = 0; i < move_plan.size(); i++) {
@@ -856,6 +1011,7 @@ class Game {
                     }
                 }
 
+                // gather all planes at the given airport
                 void gather_planes(Airport* start) {
                     for(int i = 0; i < planes.size(); i++) {
                         DEBUG = false;
@@ -864,46 +1020,56 @@ class Game {
                     }
                 }
 
+                // Returns: (bool) finished
                 bool is_done() const {
                     return finished;
                 }
 
+                // Returns: (bool) over_pm
                 bool is_over() const {
                     return over_pm;
                 }
 
+                // Returns: (string) "Player " + color.c
                 string get_name() const {
                     string out("Player ");
                     out += plane_color.c;
                     return out;
                 }
 
+                // Returns: game
+                Game* get_game() {
+                    return game;
+                }
+
+                // Returns: (vector<Airplane>&) planes
                 vector<Airplane>& get_planes() {
                     return planes;
                 }
         
+                // Returns: (pair<vector<int>, vector<int>>) turn_data
                 pair<vector<int>, vector<int>> get_turn_data() const {
                     return turn_data;
                 }
         
+                // over_pm = false;
                 void setback() {
                     over_pm = false;
                 }
         
+                // bumper_count++;
                 void bumper() {
                     bumper_count++;
                 }
 
+                // bumped_count++;
                 void bumped() {
                     bumped_count++;
                 }
 
+                // altered_bump_count++;
                 void altered_bumped() {
                     altered_bump_count++;
-                }
-        
-                Game* get_game() {
-                    return game;
                 }
         };
 
@@ -914,18 +1080,36 @@ class Game {
     //                                              \\
     //----------------------------------------------*/
 
-        std::unordered_map<string, Airport> map;
-        queue<string> takeoff_pile, western_hemi, eastern_hemi;
-        vector<Player> players;
-        vector<string> sides; // = {"red", "orange", "yellow", "green", "blue", "purple", "wild", "take-off"};
-        const int NUM_OF_PLAYERS, PLANES_PER_PLAYER, MAX_TURNS;
-        int turn_location, turn_num;
+    // everything for game objects
+    // Games hold the game map, take-off decks, and players
+    // Games handle the initialization of a game, the turn loop, and the collection of benchmark data
 
+        // hash_table containing all the airports, keyed by airport name
+        std::unordered_map<string, Airport> map;
+        // two take-off decks, one for each hemisphere
+        queue<string> western_hemi, eastern_hemi;
+        // the players
+        vector<Player> players;
+        // the sides of the dice
+        vector<string> sides; // = {"red", "orange", "yellow", "green", "blue", "purple", "wild", "take-off"};
+        // settings
+        const int NUM_OF_PLAYERS, PLANES_PER_PLAYER, MAX_TURNS;
+        // turn tracking
+        int turn_location, turn_num;
+        // benchmarking data storage
         vector<pair<string, pair<vector<int>, vector<int>>>> player_turn_datas;
         vector<vector<pair<string, pair<vector<int>, vector<int>>>>> game_datas;
     
-        // (players, planes, pm_takeoff_bump, debug, max_turns)
-        Game(int player_count = 4, int planes_per_player = 4, bool pm_takeoff_bump = false, bool wilds = true, bool takeoffs = true, bool debug = false, int max_turns = 200) : 
+        // Takes: (int) players = 4
+        //        (int) planes = 4
+        //        (bool) pm_takeoff_bump = false
+        //        (bool) wilds = true
+        //        (bool) takeoffs = true
+        //        (bool) debug = false
+        //        (int) max_turns) = 300
+        // Does: copies given values, initializes dice sides, initializes map
+        //       (the map and dice sides and initilized here because they will stay the same over multiple game-runs on the same game object)
+        Game(int player_count = 4, int planes_per_player = 4, bool pm_takeoff_bump = false, bool wilds = true, bool takeoffs = true, bool debug = false, int max_turns = 300) : 
             NUM_OF_PLAYERS(player_count), 
             PLANES_PER_PLAYER(planes_per_player), 
             MAX_TURNS(max_turns),
@@ -948,12 +1132,14 @@ class Game {
                 initialize_map();
             }
 
+        // function to run a single game
         void run_game() {
             new_game();
             loop();
             cout << "\n\n";
         }
 
+        // function to set up a game, seed randomness and creates players
         void new_game() {
             // seed randomness
                 int seed = time(0);
@@ -1003,8 +1189,9 @@ class Game {
                 }
         }
 
-        // returns [avg_win_turn, avg_lose_turn, avg_total_turn, avg_bumps(, avg_altered_bumps)]
-        vector<int> end_game() {
+        // function to collect data from all games played with this object so far
+        // Returns: (vector<int>) games_data [avg_win_turn, avg_lose_turn, avg_total_turn, avg_bumps(, avg_altered_bumps)]
+        vector<int> get_games_data() {
             int total_winner_turn(0);
             int total_loser_turn(0);
             int total_player_turn(0);
@@ -1055,8 +1242,7 @@ class Game {
             return output;
         }
 
-        // game loop
-        // returns [avg_win_turn, avg_lose_turn, avg_total_turn, avg_bumps(, avg_altered_bumps)]
+        // game loop, runs turn loop, including giving players their rolls, collects benchmarking data
         void loop() {
             bool someone_left(true);
             // while ther are turn and players left
@@ -1097,7 +1283,9 @@ class Game {
             game_datas.push_back(player_turn_datas);
         }
 
-        // simulate drawing a take-off card
+        // simulate drawing a take-off card, draws from hemisphere denoted by bool
+        // Takes: (bool) west = false
+        // Returns: (Airport*) dest
         Airport* draw_takeoff(bool west = false) {
             queue<string>* correct_pile(&eastern_hemi);
             if(west) {
@@ -1120,7 +1308,10 @@ class Game {
             }
         }
 
-        // returns vector with Actions to be taken this turn
+        // roll actions for player
+        // Takes: (const Player*) roller
+        //        (int) dice
+        // Returns: (vector<Action>) rolls
         vector<Action> roll(const Player* roller, int dice = 2) {
             // get string versions
             vector<string> rolls(dice);
@@ -1164,6 +1355,11 @@ class Game {
             return actions;
         }
 
+        // initializes map by reading airport data from a file and automaticall creating connections to "close" airports
+        // FUTURE: each game object has a map_file string
+        //         get close airports by longitude AND latitude instead of jump longitude (avoid super vertical routes?)
+        //         randomize which close airports to connect to, don't just choose the closest ones
+        //         create single-color tranversals before filling connections
         void initialize_map() {
             // generate Airports and connections
             map.clear();

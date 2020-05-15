@@ -89,7 +89,7 @@ int main() {
             test.run_game();
             runs--;
         }
-        scenario_results.push_back(std::make_pair(scenarios[i], test.end_game()));
+        scenario_results.push_back(std::make_pair(scenarios[i], test.get_games_data()));
     }
 
     // for each scenario result
