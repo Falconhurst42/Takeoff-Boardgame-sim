@@ -79,7 +79,7 @@ int main() {
     // total game runs for each scenario
     unsigned int RUNS(1);
     unsigned int MAPS(1);
-    cout << "How may maps? ";
+    cout << "How many maps? ";
     std::cin >> MAPS;
     cout << "How many runs per scenario per map? ";
     std::cin >> RUNS;

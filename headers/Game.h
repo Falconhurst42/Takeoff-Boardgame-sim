@@ -334,6 +334,7 @@ class Game {
                                 do_action(Action(dest), true);
                                 owner->altered_bump();
                                 do_start_jump = false;
+                                this->check_bump(main_board);
                             }
                         }
                         owner->setback();
@@ -497,6 +498,7 @@ class Game {
                             if( !(occ->operator[](i) == this || get_location_special(main_board) == start || get_location_special(main_board) == end ) ) {
                                 // if the plane has a different owner
                                 if(occ->operator[](i)->owner != owner) {
+                                    if(occ->operator[](i)->owner == NULL)
                                     // update bumper count
                                     if(main_board) {
                                         owner->bumper();
@@ -1129,7 +1131,7 @@ class Game {
         // Does: copies given values, initializes dice sides, initializes map
         //       (the map and dice sides are initilized here because they will stay the same over multiple game-runs on the same game object)
         //       IMPROVE: (Well, sides actually can change but I'm not going to bother right now)
-        Game(int player_count = 4, int planes_per_player = 4, bool pm_takeoff_bump = false, bool wilds = true, bool takeoffs = true, bool debug = false, int max_turns = 300) : 
+        Game(int player_count = 4, int planes_per_player = 4, bool pm_takeoff_bump = false, bool wilds = true, bool takeoffs = true, bool debug = false, int max_turns = 1000) : 
             NUM_OF_PLAYERS(player_count), 
             PLANES_PER_PLAYER(planes_per_player), 
             MAX_TURNS(max_turns),
@@ -1213,8 +1215,7 @@ class Game {
                         }
                         else {
                             western_hemi.push((*it).first);
-                        }
-                        
+                        } 
                     }
                 }
             return seed;
@@ -1283,9 +1284,9 @@ class Game {
             bool someone_left(true);
             // while ther are turn and players left
             for(turn_num = 0; turn_num != MAX_TURNS && someone_left; turn_num++) {
-                if(DEBUG) {
+                //if(DEBUG) {
                     cout << "Turn #" << turn_num+1 << ":\n";
-                }
+                //}
                 someone_left = false;
                 // have each player take their turn
                 for(turn_location = 0; turn_location < players.size(); turn_location++) {
