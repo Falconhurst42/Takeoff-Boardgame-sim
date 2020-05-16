@@ -1,14 +1,14 @@
-|| Avg Winner Turns | Avg Loser Turns | Avg Total Turns | Avg Total Bumps | Total Altered Bumps |
+| 10x2 | Avg Winner Turns | Avg Loser Turns | Avg Total Turns | Avg Total Bumps | Avg Total Altered Bumps |
 |-:|:-:|:-:|:-:|:-:|:-:|
-| __Wilds, Takeoffs__ | 41 | 77 | 240 | 157 |  |
-| _(with altered bumps):_ | 31 | 61 | 190 | 137 | 24 | 
+| __Wilds, Takeoffs__ | 45.9 | 96.5 | 296.85 | 214.6 |  |
+| _(with altered bumps):_ | 47.05 | 91.55 | 286.6 | 207.6 | 2.7 | 
 |
-| __Wilds, No Takeoffs__ | 66 | 177 | 523 | 483 |  |
-| _(with altered bumps):_ | 44 | 92 | 290 | 301 | 53 | 
+| __Wilds, No Takeoffs__ | 50.45 | 108.1 | 340.75 | 321.1 |  |
+| _(with altered bumps):_ | 63.75 | 112.95 | 367.55 | 367.05 | 3.4 | 
 |
-| __No Wilds, Takeoffs__ | 78 | 157 | 489 | 303 |  |
-| _(with altered bumps):_ | 37 | 71 | 223 | 154 | 51 | 
+| __No Wilds, Takeoffs__ | 71.85 | 128.1 | 405.45 | 256.55 |  |
+| _(with altered bumps):_ | 61 | 114.65 | 361.25 | 230.7 | 4.35 | 
 |
-| __No Wilds, No Takeoffs__ | 53 | 104 | 334 | 278 |  |
-| _(with altered bumps):_ | 55 | 118 | 371 | 299 | 95 | 
+| __No Wilds, No Takeoffs__ | 67.3 | 126.35 | 403.75 | 327.4 |  |
+| _(with altered bumps):_ | 61.3 | 122.65 | 393.55 | 326.8 | 3.75 | 
 |

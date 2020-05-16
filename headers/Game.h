@@ -1116,6 +1116,8 @@ class Game {
         // benchmarking data storage
         vector<pair<string, pair<vector<int>, vector<int>>>> player_turn_datas;
         vector<vector<pair<string, pair<vector<int>, vector<int>>>>> game_datas;
+        // this Game's seed (for the map initilization)
+        const int MAP_SEED;
     
         // Takes: (int) players = 4
         //        (int) planes = 4
@@ -1125,12 +1127,16 @@ class Game {
         //        (bool) debug = false
         //        (int) max_turns) = 300
         // Does: copies given values, initializes dice sides, initializes map
-        //       (the map and dice sides and initilized here because they will stay the same over multiple game-runs on the same game object)
+        //       (the map and dice sides are initilized here because they will stay the same over multiple game-runs on the same game object)
+        //       IMPROVE: (Well, sides actually can change but I'm not going to bother right now)
         Game(int player_count = 4, int planes_per_player = 4, bool pm_takeoff_bump = false, bool wilds = true, bool takeoffs = true, bool debug = false, int max_turns = 300) : 
             NUM_OF_PLAYERS(player_count), 
             PLANES_PER_PLAYER(planes_per_player), 
             MAX_TURNS(max_turns),
-            sides(DEFUALT_COLORS) {
+            sides(DEFUALT_COLORS),
+            MAP_SEED(time(0)) {
+            // seed randomness
+                srand(MAP_SEED);
             // update mode variables
                 DEBUG = debug;
                 PM_TAKEOFF_BUMP = pm_takeoff_bump;
@@ -1157,7 +1163,7 @@ class Game {
             if(DEBUG) {
                 cout << "\n\n";
             }
-            // delay to ensure unique seeds
+            // delay to ensure unique seeds for turn orders
             while(time(0) == seed) {
                 ;
             }
@@ -1216,7 +1222,7 @@ class Game {
 
         // function to collect data from all games played with this object so far
         // Returns: (vector<int>) games_data [avg_win_turn, avg_lose_turn, avg_total_turn, avg_bumps(, avg_altered_bumps)]
-        vector<int> get_games_data() {
+        vector<float> get_games_data() {
             int total_winner_turn(0);
             int total_loser_turn(0);
             int total_player_turn(0);
@@ -1240,13 +1246,13 @@ class Game {
                 }
             }
 
-            vector<int> output;
-            output.push_back(total_winner_turn/(float)game_datas.size());
-            output.push_back(total_loser_turn/(float)game_datas.size());
-            output.push_back(total_player_turn/(float)game_datas.size());
-            output.push_back(total_bumps/(float)game_datas.size());
+            vector<float> output;
+            output.push_back((float)total_winner_turn/(float)game_datas.size());
+            output.push_back((float)total_loser_turn/(float)game_datas.size());
+            output.push_back((float)total_player_turn/(float)game_datas.size());
+            output.push_back((float)total_bumps/(float)game_datas.size());
             if(PM_TAKEOFF_BUMP) {
-                output.push_back(total_altered_bumps);
+                output.push_back((float)total_altered_bumps/(float)game_datas.size());
             }
 
             if(DEBUG) {
@@ -1255,9 +1261,19 @@ class Game {
                     << "There were, on average, " << output[2] << " total turns per game\n"
                     << "There were, on average, " << output[3] << " total bumps per game\n";
                 if(PM_TAKEOFF_BUMP) {
-                    cout << "There were a total of " << output[4] << " altered bumps\n";
+                    cout << "There were an average of " << output[4] << " altered bumps\n";
                 }
             }
+
+            // clear game results, player, and take-off data
+            game_datas.clear();
+            players.clear();
+
+            // I got this method of erasing queues from David Rodriguez's answer to "How do I clear the std::queue efficiently?" on StackOverflow (https://stackoverflow.com/questions/709146/how-do-i-clear-the-stdqueue-efficiently)
+            queue<string> empty1;
+            queue<string> empty2;
+            std::swap(western_hemi, empty1);
+            std::swap(eastern_hemi, empty2);
 
             return output;
         }
@@ -1430,6 +1446,38 @@ class Game {
                     unused_colors.erase(unused_colors.begin()+color_index);
                 }
             }
+        }
+
+        // updates settings to given settings
+        void update_settings(bool pm_takeoff_bump, bool wilds, bool takeoffs) {
+            // update the easy one
+            PM_TAKEOFF_BUMP = pm_takeoff_bump;
+            // update the wilds
+            // remove it or add it to the dice as needed
+            if(WILDS && !wilds) {
+                for(auto it = sides.begin(); it != sides.end(); it++) {
+                    if(*it == "wild") {
+                        sides.erase(it);
+                        break;
+                    }
+                }
+            }
+            else if(!WILDS && wilds) {
+                sides.push_back("wild");
+            }
+            WILDS = wilds;
+            if(TAKEOFFS && !takeoffs) {
+                for(auto it = sides.begin(); it != sides.end(); it++) {
+                    if(*it == "take-off") {
+                        sides.erase(it);
+                        break;
+                    }
+                }
+            }
+            else if(!TAKEOFFS && takeoffs) {
+                sides.push_back("take-off");
+            }
+            TAKEOFFS = takeoffs;
         }
 };
 

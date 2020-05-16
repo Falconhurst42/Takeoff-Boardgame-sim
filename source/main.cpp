@@ -58,10 +58,30 @@ string vector_to_string(vector<T> source) {
     return out;
 }
 
+// runs the given scenario in the given game for the given number of runs and adds the data to the correct places in the results_container
+void run_game_and_scenario(Game* game, vector<pair<Scenario, vector<float>>>& results_container, vector<Scenario>& scenarios, int scen_ind = 0, unsigned int runs = 1) {
+    // update settings
+    game->update_settings(scenarios[scen_ind].pm_takeoff_bump, scenarios[scen_ind].wilds, scenarios[scen_ind].takeoffs);
+    // each run
+    for(int run = 0; run < runs; run++) {
+        // run game
+        game->run_game();
+    }
+    // get results
+    vector<float> results = game->get_games_data();
+    // add results to container
+    for(int i = 0; i < results.size(); i++) {
+        results_container[scen_ind].second[i] += results[i];
+    }
+}
+
 int main() {
     // total game runs for each scenario
-    int RUNS(1);
-    cout << "How many runs per scenario? ";
+    unsigned int RUNS(1);
+    unsigned int MAPS(1);
+    cout << "How may maps? ";
+    std::cin >> MAPS;
+    cout << "How many runs per scenario per map? ";
     std::cin >> RUNS;
 
     // generate scenarios
@@ -76,9 +96,17 @@ int main() {
             scenarios.push_back(Scenario(switches[i][0], switches[i][1], switches[i][2]));
         }
 
-    vector<pair<Scenario, vector<int>>> scenario_results;
+    vector<pair<Scenario, vector<float>>> scenario_results;
+    for(int i = 0; i < scenarios.size(); i++) {
+        if(scenarios[i].pm_takeoff_bump) {
+            scenario_results.push_back(std::make_pair(scenarios[i], vector<float>(5, 0)));
+        }
+        else {
+            scenario_results.push_back(std::make_pair(scenarios[i], vector<float>(4, 0)));
+        }
+    }
 
-    // for each scenario
+    /*// for each scenario
     for(int i = 0; i < scenarios.size(); i++) {
         cout << "\nScenario #" << i+1;
         // set up the game object
@@ -91,10 +119,24 @@ int main() {
         }
         // collect the benchmarking data
         scenario_results.push_back(std::make_pair(scenarios[i], test.get_games_data()));
-    }
+    }*/
 
-    // output the benchmarking data
-    // for each scenario result
+    for(int map = 0; map < MAPS; map++) {
+        cout << "\nMap #" << map+1 << ":";
+        // create game (and map)
+        Game test(scenarios[0].players, scenarios[0].planes);
+        // run each scenario on the map and add the data
+        for(int scen_ind = 0; scen_ind < scenarios.size(); scen_ind++) {
+            cout << "\n   Scenario #" << scen_ind+1 << ": ";
+            run_game_and_scenario(&test, scenario_results, scenarios, scen_ind, RUNS);
+        }
+    }
+    // adjust averages of benchmark data according to number of maps
+    for(int scen_ind = 0; scen_ind < scenarios.size(); scen_ind++) {
+        for(int result_ind = 0; result_ind < scenario_results[scen_ind].second.size(); result_ind++) {
+            scenario_results[scen_ind].second[result_ind] /= MAPS;
+        }
+    }
 
     // cout results
     cout << "\n";
@@ -112,7 +154,7 @@ int main() {
              << "There were, on average, " << scenario_results[i].second[2] << " total turns per game\n  "
              << "There were, on average, " << scenario_results[i].second[3] << " total bumps per game\n  ";
         if(scenario_results[i].first.pm_takeoff_bump) {
-            cout << "There were a total of " << scenario_results[i].second[4] << " altered bumps\n";
+            cout << "There were, on average, " << scenario_results[i].second[4] << " altered bumps\n";
         }
         cout << "\n";
     }
@@ -123,7 +165,7 @@ int main() {
         throw std::runtime_error("results file didn't open");
     }
     // header
-    results_file << "|| Avg Winner Turns | Avg Loser Turns | Avg Total Turns | Avg Total Bumps | Total Altered Bumps |\n|-:|:-:|:-:|:-:|:-:|:-:|\n";
+    results_file << "| " << MAPS << "x" << RUNS << " | Avg Winner Turns | Avg Loser Turns | Avg Total Turns | Avg Total Bumps | Avg Total Altered Bumps |\n|-:|:-:|:-:|:-:|:-:|:-:|\n";
     // data
     for(int i = 0; i < scenario_results.size(); i += 2) {
         // first row header
