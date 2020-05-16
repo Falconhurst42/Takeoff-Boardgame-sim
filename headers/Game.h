@@ -9,8 +9,17 @@
 //   All of the code is contained within the Game class, even the other classes
 //   This is philosophically due to the fact that every class is designed to be used only within a Game object
 //   This is practially because it wouldn't compile otherwise
+//
+/* class Game {
+    struct Color {}
+    struct Action {}
+    struct Airport {}
+    class Airplane {}
+    class Player {}
+    // then the actual code for the game class
+}*/
 
-// 
+// This file contains all the code necessary to run a simulate game of Takeoff and gather the benchmarking data
 
 #ifndef GAME_H_
 #define GAME_H_
@@ -302,33 +311,42 @@ class Game {
                             break;
                         }
                     }
-                    // set location to start
-                    get_location_special(main_board) = start;
-                    // update occupancy at start
-                    get_occupancy_special(start, main_board).push_back(this);
 
+                    // make sure we want to do the regular jump
+                    bool do_start_jump(true);
                     // update over_pm flag and bumped count
                     // handle altered bumps
                     if(main_board) {
-                        owner->setback();
                         owner->bumped();
                         // if PM_TAKE_OFF_BUMP, takeoff to the eastern hemisphere
                         if(PM_TAKEOFF_BUMP && owner->is_over()) {
                             Airport* dest = owner->get_game()->draw_takeoff();
                             // so long as we're allowed to go there
                             bool open(true);
-                            // if any plane on the destionation has the same owner us, don't go there
+                            // if any plane on the destination has the same owner us, don't go there
                             for(int i = 0; i < dest->occupants.size(); i++) {
                                 if(dest->occupants[i]->get_owner_ptr() == owner) {
                                     open = false;
                                 }
                             }
                             if(open) {
+                                // takeoff and track
                                 do_action(Action(dest), true);
-                                owner->altered_bumped();
+                                owner->altered_bump();
+                                do_start_jump = false;
                             }
                         }
+                        owner->setback();
                     }
+
+                    // only false if altered bump occured
+                    if(do_start_jump) {
+                        // set location to start
+                        get_location_special(main_board) = start;
+                        // update occupancy at start
+                        get_occupancy_special(start, main_board).push_back(this);
+                    }
+
                 }
 
                 // moves this plane to the given Airport (on the main or shadow board depending on the flag)
@@ -989,13 +1007,12 @@ class Game {
                     if(!over_pm) {
                         bool over(true);
                         for(int i = 0; i < planes.size(); i++) {
-                            planes[i].check_bump(true);
                             if(!planes[i].is_over(true)) {
                                 over = false;
                             }
                         }
                         over_pm = over;
-                        if(over_pm) {
+                        if(over_pm && over) {
                             int breaking = 0;
                         }
                     }
@@ -1068,7 +1085,7 @@ class Game {
                 }
 
                 // altered_bump_count++;
-                void altered_bumped() {
+                void altered_bump() {
                     altered_bump_count++;
                 }
         };
@@ -1134,13 +1151,20 @@ class Game {
 
         // function to run a single game
         void run_game() {
-            new_game();
+            int seed = new_game();
             loop();
-            cout << "\n\n";
+            cout << ".";
+            if(DEBUG) {
+                cout << "\n\n";
+            }
+            // delay to ensure unique seeds
+            while(time(0) == seed) {
+                ;
+            }
         }
 
         // function to set up a game, seed randomness and creates players
-        void new_game() {
+        int new_game() {
             // seed randomness
                 int seed = time(0);
                 //int seed = 1589430794;
@@ -1187,6 +1211,7 @@ class Game {
                         
                     }
                 }
+            return seed;
         }
 
         // function to collect data from all games played with this object so far
@@ -1198,11 +1223,7 @@ class Game {
             int total_bumps(0);
             int total_altered_bumps(0);
             for(int g = 0; g < game_datas.size(); g++) {
-                // output player_turn_data
-                cout << "Results of Game #" << g+1 << ":\n";
                 for(int i = 0; i < game_datas[g].size(); i++) {
-                    cout << "   " << game_datas[g][i].first << " finshed in " << game_datas[g][i].second.first[0] << " turns.\n"
-                         << "They got bumped " << game_datas[g][i].second.first[1] << " times and bumped other players " << game_datas[g][i].second.first[2] << " times.\n";
                     // track winner turn
                     if(i == 0) {
                         total_winner_turn += game_datas[g][i].second.first[0];
@@ -1216,9 +1237,6 @@ class Game {
                     if(PM_TAKEOFF_BUMP) {
                         total_altered_bumps += game_datas[g][i].second.first[3];
                     }
-                    for(int j = 0; j < game_datas[g][i].second.second.size(); j++) {
-                        cout << "      Plane #" << j+1 << " finished in " << game_datas[g][i].second.second[j]+1 << " turns.\n";
-                    }
                 }
             }
 
@@ -1231,12 +1249,14 @@ class Game {
                 output.push_back(total_altered_bumps);
             }
 
-            cout << "\nWinners took an average of " << output[0] << " turns to finish\n"
-                 << "Losers took an average of " << output[1] << " turns to finish\n"
-                 << "There were, on average, " << output[2] << " total turns per game\n"
-                 << "There were, on average, " << output[3] << " total bumps per game\n";
-            if(PM_TAKEOFF_BUMP) {
-                cout << "There were a total of " << output[4] << " altered bumps\n";
+            if(DEBUG) {
+                cout << "\nWinners took an average of " << output[0] << " turns to finish\n"
+                    << "Losers took an average of " << output[1] << " turns to finish\n"
+                    << "There were, on average, " << output[2] << " total turns per game\n"
+                    << "There were, on average, " << output[3] << " total bumps per game\n";
+                if(PM_TAKEOFF_BUMP) {
+                    cout << "There were a total of " << output[4] << " altered bumps\n";
+                }
             }
 
             return output;
