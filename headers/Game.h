@@ -226,7 +226,49 @@ class Game {
                 lat(lati),
                 lon(longi),
                 occupants(0, NULL),
-                shadow_occupants(0, NULL) {}
+                shadow_occupants(0, NULL),
+                children(0),
+                parents(0) {
+                    children.reserve(7);
+                    parents.reserve(10);
+                }
+            
+            Airport(const Airport& other) :
+                name(other.name),
+                lat(other.lat),
+                lon(other.lon),
+                occupants(other.occupants),
+                shadow_occupants(other.shadow_occupants),
+                children(other.children),
+                parents(other.parents) {
+                    int i = 0;
+                }
+            
+            // get the linear distance between given Airports as float
+            static float get_distance(Airport* parent, Airport* child) {
+                // if they're in the correct order, return the distance between the airports
+                if(parent->lon > child->lon)
+                    return std::sqrt(std::pow(parent->lon - child->lon, 2) + std::pow(parent->lat - child->lat, 2));
+                // otherwise return a negative distance
+                return 10000;
+            }
+
+            // get angle between given Airports as float in radians
+            static float get_angle(Airport* parent, Airport* child) {
+                // if they're in the correct order, return the angle between the airports in radians
+                if(parent->lon > child->lon)
+                    return std::atan((parent->lat - child->lat)/(child->lon - parent->lon));
+                // otherwise return a bad angle distance
+                return 0;
+            }
+
+            // j = dist * sqrt(max(0.2, abs(angle)))
+            // biased toward low angles
+            static float get_adjusted_distance(Airport* parent, Airport* child) {
+                float MIN_ANGLE = 0.15;
+                float EXP = -3;
+                return Airport::get_distance(parent, child) * std::min(100., std::pow((float)3.14159/2. - std::max(MIN_ANGLE, std::abs(Airport::get_angle(parent, child))), EXP));
+            }
 
             // creates connection of given color between given aiports, enforcing right to left motion
             // Takes: (Airport*) parent
@@ -347,7 +389,7 @@ class Game {
                         // update occupancy at start
                         get_occupancy_special(start, main_board).push_back(this);
                     }
-
+                    return true;
                 }
 
                 // moves this plane to the given Airport (on the main or shadow board depending on the flag)
@@ -572,7 +614,7 @@ class Game {
                 vector<Airplane> planes;
                 // how much this player values bumping other players
                 // FUTURE: make this value a coefficient to be multiplied by adjusted enemy plane score (negative plus 180) (will prioritize planes further along)
-                const float BUMP_VALUE = 20;
+                const float BUMP_VALUE = 1.5;
                 // flags for a player who has all their finished or over the prime meridian
                 bool finished, over_pm;
 
@@ -657,7 +699,7 @@ class Game {
                 //          scores the move plan based on the planes on the shadow board (extra points for bumping another player)
                 //          tracks the move plan with the best score
                 //       returns the best move_plan
-                // IMPROVE: pretty much everything in here should be done in its own function
+                // IMPROVE??? pretty much everything in here should be done in its own function
                 void decide_moves(vector<pair<Airplane*, Action*>>& move_plan, vector<Action> actions)  {
                     // decide what to do with rolls
                     // find every permutation of planes with length equal to number of actions (including repeated planes)
@@ -765,8 +807,9 @@ class Game {
                             for(int b = 0; b < planes.size(); b++) {
                                 // watch out for self-bumps, thrown as error
                                 try {
+                                    // bump value = BV*(180-long) 
                                     if(planes[b].check_bump(false)) {
-                                        score += BUMP_VALUE;
+                                        score += BUMP_VALUE*(180-planes[b].get_loc(false)->lon);
                                     }
                                 }
                                 catch (const std::domain_error& self_bump) {
@@ -908,45 +951,11 @@ class Game {
                 //          if that was the last plane, mark this player as finished
                 //       check each plane to see if its bumping another plane
                 //       check if every plane is over the prime meridian, if so update the flag for that
-                // IMPROVE: the expenditure of take-offs could be its own function
+                // IMPROVE?? functionalize planes/players end
                 void take_turn(vector<Action> actions, vector<Player>& fellow_gamers) {
                     // if takeoffs are enabled
                     if(TAKEOFFS) {
-                        // do take-offs on worst planes
-                        for(int i = 0; i < actions.size(); i++) {
-                            // if an action is a take-off
-                            if(actions[i].type == 'T') {
-                                // if the location of the take-off matches another ally plane, just delete it
-                                bool use_it(true);
-                                for(int p = 0; p < planes.size(); p++) {
-                                    if(actions[i].dest == planes[p].get_loc(true)) {
-                                        use_it = false;
-                                        break;
-                                    }
-                                }
-                                if(use_it) {
-                                    // find the worst plane
-                                    Airplane* worst_plane = &(planes[0]);
-                                    float worst_score = get_plane_score(worst_plane, true);
-                                    for(int j = 1; j < planes.size(); j++) {
-                                        float score = get_plane_score(&(planes[j]), true);
-                                        if(score < worst_score) {
-                                            worst_plane = &(planes[j]);
-                                            worst_score = score;
-                                        }
-                                    }
-                                    // and use the take-off on it
-                                    worst_plane->do_action(actions[i], true);
-                                }
-
-                                // delete used take-off
-                                for(int j = i+1; j < actions.size(); j++) {
-                                    actions[j-1] = actions[j];
-                                }
-                                actions.pop_back();
-                                i--;
-                            }
-                        }
+                        expend_takeoffs(actions);
                     }
                     // if there are still moves left
                     if(actions.size() > 0) {
@@ -1007,20 +1016,64 @@ class Game {
                     }
                     // check for over_pm
                     if(!over_pm) {
-                        bool over(true);
-                        for(int i = 0; i < planes.size(); i++) {
-                            if(!planes[i].is_over(true)) {
-                                over = false;
-                            }
-                        }
-                        over_pm = over;
-                        if(over_pm && over) {
-                            int breaking = 0;
-                        }
+                        over_pm = check_over_pm();
                     }
 
-                    if(DEBUG)
+                    if(DEBUG) {
                         cout << "\n\n";
+                    }
+                }
+
+                // use up any takeoffs
+                // FUTURE: check if you could finish all planes first?
+                void expend_takeoffs(vector<Action>& actions) {
+                    // do take-offs on worst planes
+                    for(int i = 0; i < actions.size(); i++) {
+                        // if an action is a take-off
+                        if(actions[i].type == 'T') {
+                            // if the location of the take-off matches another ally plane, just delete it
+                            bool use_it(true);
+                            for(int p = 0; p < planes.size(); p++) {
+                                if(actions[i].dest == planes[p].get_loc(true)) {
+                                    use_it = false;
+                                    break;
+                                }
+                            }
+                            if(use_it) {
+                                // find the worst plane
+                                Airplane* worst_plane = &(planes[0]);
+                                float worst_score = get_plane_score(worst_plane, true);
+                                for(int j = 1; j < planes.size(); j++) {
+                                    float score = get_plane_score(&(planes[j]), true);
+                                    if(score < worst_score) {
+                                        worst_plane = &(planes[j]);
+                                        worst_score = score;
+                                    }
+                                }
+                                // and use the take-off on it
+                                worst_plane->do_action(actions[i], true);
+                            }
+
+                            // delete used take-off
+                            for(int j = i+1; j < actions.size(); j++) {
+                                actions[j-1] = actions[j];
+                            }
+                            actions.pop_back();
+                            i--;
+                        }
+                    }
+                }
+
+                // check if a plane is over the prime meridian
+                // return whether it is
+                bool check_over_pm() {
+                    bool over(true);
+                    for(int i = 0; i < planes.size(); i++) {
+                        if(!planes[i].is_over(true)) {
+                            over = false;
+                        }
+                    }
+                    return over;
                 }
 
                 // sync shadow location with real location for all planes
@@ -1120,6 +1173,7 @@ class Game {
         vector<vector<pair<string, pair<vector<int>, vector<int>>>>> game_datas;
         // this Game's seed (for the map initilization)
         const int MAP_SEED;
+        const string MAP_SOURCE;
     
         // Takes: (int) players = 4
         //        (int) planes = 4
@@ -1131,12 +1185,13 @@ class Game {
         // Does: copies given values, initializes dice sides, initializes map
         //       (the map and dice sides are initilized here because they will stay the same over multiple game-runs on the same game object)
         //       IMPROVE: (Well, sides actually can change but I'm not going to bother right now)
-        Game(int player_count = 4, int planes_per_player = 4, bool pm_takeoff_bump = false, bool wilds = true, bool takeoffs = true, bool debug = false, int max_turns = 1000) : 
+        Game(int player_count = 4, int planes_per_player = 4, string map_source = "map.txt", bool pm_takeoff_bump = false, bool wilds = true, bool takeoffs = true, bool debug = false, int max_turns = 2500) : 
             NUM_OF_PLAYERS(player_count), 
             PLANES_PER_PLAYER(planes_per_player), 
             MAX_TURNS(max_turns),
             sides(DEFUALT_COLORS),
-            MAP_SEED(time(0)) {
+            MAP_SEED(time(0)),
+            MAP_SOURCE(map_source) {
             // seed randomness
                 srand(MAP_SEED);
             // update mode variables
@@ -1275,6 +1330,19 @@ class Game {
             queue<string> empty2;
             std::swap(western_hemi, empty1);
             std::swap(eastern_hemi, empty2);
+
+            // Output map data
+            std::ofstream map_data("map_data.txt");
+            if(!map_data.is_open()) {
+                throw std::runtime_error("map data not opening");
+            }
+            for(auto it = map.begin(); it != map.end(); it++) {
+                map_data << (*it).first << " " << (*it).second.lat << " " << (*it).second.lon;
+                for(int i = 0; i < (*it).second.children.size(); i++) {
+                    map_data << " " << (*it).second.children[i].first->lat << " " << (*it).second.children[i].first->lon << " " << (*it).second.children[i].second.c;
+                }
+                map_data << '\n';
+            }
 
             return output;
         }
@@ -1422,31 +1490,100 @@ class Game {
             // sort by latittude
             std::sort(connectees.begin(), connectees.end(), [](Airport* a, Airport* b) { return (a->lon > b->lon);});
 
-            // for each plane, starting in the east (don't bother with the last one)
+            // connnection-count-pool
+            vector<int> connection_count_pool = {1, 2, 2, 2, 3, 3, 3, 4, 5, 6};
+
+            // for each port, starting in the east (don't bother with the last one)
             for(int i = 0; i < connectees.size()-1; i++) {
+                cout << ".";
                 // number of connections (1 to all colors)
-                int connections = 1+rand()%DEFUALT_COLORS.size();
+                int connections = connection_count_pool[rand()%connection_count_pool.size()];
                 // always make max connections for start
                 if(connectees[i]->name == "START") {
                     connections = DEFUALT_COLORS.size();
                 }
 
-                vector<string> unused_colors(DEFUALT_COLORS);
+                // create vector of candidates
+                    // of all westward
+                    // pick the 10 with the lowest adjusted distance
+                    // randomly select from those
+                float worst_score(0);
+                int worst_index = -1;
+                Airport** candidates = new Airport*[10];
+                int cand_count = 0;
+                // getting candidates with lowest scores
+                cout << "\n\nFor " << connectees[i]->name << "...\n";
+                for(int j = i+1; j < connectees.size(); j++) {
+                    // if we haven't got 10 yet, just add it on
+                    if(cand_count < 10) {
+                        candidates[cand_count] = connectees[j];
+                        //update worst tracker
+                        float cur_score = Airport::get_adjusted_distance(connectees[i], connectees[j]);
+                        if(cur_score > worst_score) {
+                            worst_score = cur_score;
+                            worst_index = cand_count;
+                        }
+                        cout << "Def: " << connectees[j]->name;
+                            cout << ", " << Airport::get_distance(connectees[i], connectees[j]);
+                            cout << " -> " << cur_score;
+                            cout << " cuz " << Airport::get_angle(connectees[i], connectees[j]) << "\n";
+                        cand_count++;
+                    }
+                    else {
+                        // should we let it on?
+                        float cur_score = Airport::get_adjusted_distance(connectees[i], connectees[j]);
+                        if(cur_score < worst_score) {
+                            // add it, make it the worst temporarily
+                            candidates[worst_index] = connectees[j];
+                            worst_score = cur_score;
+                            cout << "Added: " << connectees[j]->name;
+                                cout << ", " << Airport::get_distance(connectees[i], connectees[j]);
+                                cout << " -> " << cur_score;
+                                cout << " cuz " << Airport::get_angle(connectees[i], connectees[j]) << "\n";
+                            // find new worst
+                            // for each candidate
+                            for(int k = 0; k < 10; k++) {
+                                // get score
+                                cur_score = Airport::get_adjusted_distance(connectees[i], candidates[k]);
+                                // update worst
+                                if(cur_score >= worst_score) {
+                                    worst_score = cur_score;
+                                    worst_index = k;
+                                }
+                            }
+                        }
+                    }
+                }
 
-                // for the next (connections) airports in the vector
-                for(int j = i+1; j < connectees.size() && j-i <= connections; j++) {
-                    // select which color we are using
+                vector<string> unused_colors(DEFUALT_COLORS);
+                // for each connection...
+                for(int j = 0; j < connections && cand_count != 0; j++) {
+                    // pick random color
                     int color_index = rand()%unused_colors.size();
+                    // pick random candidate
+                    int cand_ind = rand()%cand_count;
 
                     // make connection
-                    Airport::connect(connectees[i], connectees[j], Color(unused_colors[color_index]));
+                    cout << "Connecting: " << connectees[i]->name << " & " << candidates[cand_ind]->name << " w/" << unused_colors[color_index] << '\n';
+                    Airport::connect(connectees[i], candidates[cand_ind], Color(unused_colors[color_index]));
 
-                    //cout << "Connected " << connectees[i]->name << " & " << connectees[j]->name << " with " << unused_colors[color_index] << '\n';
+                    // erase used candidate
+                    cand_count--;
+                    Airport** temp = new Airport*[cand_count];
+                    for(int c = 0; c < cand_count; c++) {
+                        temp[c] = candidates[c];
+                    }
+                    delete [] candidates;
+                    candidates = temp;
 
                     // erase used color
                     unused_colors.erase(unused_colors.begin()+color_index);
                 }
+
+                delete [] candidates;
             }
+            
+            // make sure there's plenty of connections to the end
         }
 
         // updates settings to given settings

@@ -76,6 +76,11 @@ void run_game_and_scenario(Game* game, vector<pair<Scenario, vector<float>>>& re
 }
 
 int main() {
+    Game test;
+    test.get_games_data();
+}
+
+/*int main() {
     // total game runs for each scenario
     unsigned int RUNS(1);
     unsigned int MAPS(1);
@@ -105,21 +110,6 @@ int main() {
             scenario_results.push_back(std::make_pair(scenarios[i], vector<float>(4, 0)));
         }
     }
-
-    /*// for each scenario
-    for(int i = 0; i < scenarios.size(); i++) {
-        cout << "\nScenario #" << i+1;
-        // set up the game object
-        Game test(scenarios[i].players, scenarios[i].planes, scenarios[i].pm_takeoff_bump, scenarios[i].wilds, scenarios[i].takeoffs);
-        int runs(RUNS);
-        // run the game over and over again
-        while(runs) {
-            test.run_game();
-            runs--;
-        }
-        // collect the benchmarking data
-        scenario_results.push_back(std::make_pair(scenarios[i], test.get_games_data()));
-    }*/
 
     for(int map = 0; map < MAPS; map++) {
         cout << "\nMap #" << map+1 << ":";
@@ -190,4 +180,4 @@ int main() {
         }
         results_file << "\n|\n";
     }
-}
+}*/
